@@ -59,9 +59,12 @@ def refine_data():
     min_freq = 5
 
     vocab = [word for word, freq in word_freq.items() if freq >= min_freq and word not in ["<START>","<UNK>","<END>"]]
+    # Word to index mapping
     wotoi = {"<START>": 0, "<UNK>": 1, "<END>": 2}
+
     for i, word in enumerate(sorted(vocab), start=3):
         wotoi[word] = i
+    # Index to word mapping
     itow = {i: w for w, i in wotoi.items()}
     vocab_size = len(wotoi)
 
@@ -69,17 +72,20 @@ def refine_data():
 
 def n_word_gram(word_to_index, context_size):
     X, Y = [], []
+
     for song in song_lyrics_dict.keys():
         context = [word_to_index["<START>"]] * context_size
         for word in song_lyrics_dict[song].split():
-            ix = word_to_index.get(word, word_to_index["<UNK>"])
+            ix = word_to_index.get(word, word_to_index["<UNK>"]) # Use <UNK> for unknown words
             X.append(context.copy())
             Y.append(ix)
             context = context[1:] + [ix]
+
     return torch.tensor(X, dtype=torch.long), torch.tensor(Y, dtype=torch.long)
 
 def train():
-    context_size = 4
+    print("Inizio addestramento del modello...")
+    context_size = 4 # Number of words in the context
     embedding_dim = 40
 
     vocab_size, wotoi, itow = refine_data()
@@ -150,9 +156,8 @@ def train():
     }
     torch.save(metadata, 'metadata/eng-word-gram_metadata.pt')
 
-    pass
-
 def test_loss(model, test_loader):
+    """Evaluate the model on the test set and print the average loss."""
     model.eval()
     total_loss = 0
     with torch.no_grad():
