@@ -37,7 +37,6 @@ def clean_text(text):
     return text.strip()
 
 def refine_data():
-
     for _, row in db.iterrows():
         title = row['song']
         lyrics = row['lyric']
@@ -64,6 +63,7 @@ def refine_data():
 
     for i, word in enumerate(sorted(vocab), start=3):
         wotoi[word] = i
+
     # Index to word mapping
     itow = {i: w for w, i in wotoi.items()}
     vocab_size = len(wotoi)
@@ -85,7 +85,7 @@ def n_word_gram(word_to_index, context_size):
 
 def train():
     print("Inizio addestramento del modello...")
-    context_size = 4 # Number of words in the context
+    context_size = 6 # Number of words in the context
     embedding_dim = 40
 
     vocab_size, wotoi, itow = refine_data()
@@ -112,8 +112,9 @@ def train():
 
     for epoch in range(10):
         print(f"Epoch {epoch + 1}/{10}")
-        loop = tqdm(train_loader, leave=True)
+        loop = tqdm(train_loader, leave=False)
         epoch_losses = []
+        
         for x_batch, y_batch in loop:
             x_batch, y_batch = x_batch.to(device), y_batch.to(device)
 
@@ -142,9 +143,15 @@ def train():
                 print("Early stopping triggered!")
                 break
 
-    plt.plot(lossi)
+    plt.plot(torch.tensor(lossi).view(-1, 43).mean(dim = 1))
     plt.show()
-    test_loss(model, test_loader)
+    testLoss = test_loss(model, test_loader)
+
+    # Save performance log
+    performanceLog = f'\nEng-Model\nTraining loss: {lossi[-1]:.4f} - Test loss : {testLoss}\n' + f'Vocab: {vocab_size}W , Architecture: cs{context_size}-ed{embedding_dim}-hd{512}\n'
+
+    with open('performance_log.txt', 'a') as f:
+        f.write(performanceLog)
 
     torch.save(model.state_dict(), 'models/eng-word-gram_model.pt')
     metadata = {
@@ -166,7 +173,9 @@ def test_loss(model, test_loader):
             logits = model(x_batch)
             loss = F.cross_entropy(logits, y_batch)
             total_loss += loss.item()
-    print(f"Test Loss: {total_loss / len(test_loader):.4f}")
+    test_loss = total_loss / len(test_loader)
+    print(f"Test Loss: {test_loss:.4f}")
+    return test_loss
 
 
 if __name__ == "__main__":

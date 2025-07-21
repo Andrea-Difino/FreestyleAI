@@ -1,0 +1,11 @@
+#Model language
+#Training and test loss
+#Vocab words, context-size(cs), embedding-dim(ed), hidden-dimension(hd)
+
+Eng-Model
+Training loss: 4.0725 - Test loss : 4.293820808057821
+Vocab: 34998W , Architecture: cs6-ed40-hd512
+
+It-Model
+Training loss: 0.3580 - Test loss : 10.39093744432604
+Vocab: 584W , Architecture: cs4-ed10-hd512
