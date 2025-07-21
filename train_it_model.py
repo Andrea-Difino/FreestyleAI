@@ -131,7 +131,8 @@ def train():
                 print("Early stopping triggered!")
                 break
 
-    plt.plot(lossi)
+    #optimized plot to have a clear view of the loss
+    plt.plot(torch.tensor(lossi).view(-1, 43).mean(dim = 1))
     plt.show()
     test_loss(model, test_loader)
 
