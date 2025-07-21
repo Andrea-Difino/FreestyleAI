@@ -1,6 +1,6 @@
 .venv/*
 .idea/*
-_pychache/*
+__pycache__/*
 audio/*
 models/*
 trascrizioni/*
