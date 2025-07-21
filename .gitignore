@@ -1,0 +1,7 @@
+.venv/*
+.idea/*
+_pychache/*
+audio/*
+models/*
+trascrizioni/*
+.genius_rap_api/*
