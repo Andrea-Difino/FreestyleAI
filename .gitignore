@@ -4,4 +4,9 @@ _pychache/*
 audio/*
 models/*
 trascrizioni/*
-.genius_rap_api/*
+genius_rap_api/*
+
+#model and datasets
+*.csv
+*.pt
+
