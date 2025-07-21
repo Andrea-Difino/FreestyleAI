@@ -83,41 +83,28 @@ if __name__ == "__main__":
     for _ in range(20):
         print(generate_text())
 
-# def is_informative(word):
-#     return (
-#         not word.isnumeric() and
-#         not re.search(r'\d', word) and
-#         not re.fullmatch(r'\W+', word) and
-#         re.search('[a-zA-Z]', word) and
-#         word != "<UNK>" and
-#         word != "<START>"
-#     )
-#
-# top_n = 200
-# words_sub = []
-# embedding_sub = []
-#
-# for i in range(len(itow)):
-#     word = itow[i]
-#     if not is_informative(word):
-#         continue
-#     words_sub.append(word)
-#     embedding_sub.append(embedding_matrix[i])
-#     if len(words_sub) == top_n:
-#         break
-#
-# embedding_sub = torch.stack(embedding_sub).numpy()
-#
-# # Riduzione dimensionale
-# pca = PCA(n_components=2)
-# embedding_2d = pca.fit_transform(embedding_sub)
-#
-# # Visualizzazione
-# plt.figure(figsize=(12, 10))
-# for idx, (x, y) in enumerate(embedding_2d):
-#     plt.scatter(x, y, color='blue', alpha=0.6)
-#     plt.text(x, y, words_sub[idx], fontsize=8)
-#
-# plt.title("Embedding 2D di parole significative")
-# plt.grid(True)
-# plt.show()
+"""View the space rapresentation of the words to check for generalizations"""
+top_n = 200
+words_sub = []
+embedding_sub = []
+casual_words = random.sample(list(itow.items()), top_n)
+
+for word in casual_words:
+    words_sub.append(word[1])
+    embedding_sub.append(embedding_matrix[word[0]])
+
+embedding_sub = torch.stack(embedding_sub).numpy()
+
+#Dimensionality reduction
+pca = PCA(n_components=2)
+embedding_2d = pca.fit_transform(embedding_sub)
+
+#Plotting
+plt.figure(figsize=(12, 10))
+for idx, (x, y) in enumerate(embedding_2d):
+   plt.scatter(x, y, color='blue', alpha=0.6)
+   plt.text(x, y, words_sub[idx], fontsize=8)
+
+plt.title("Embedding 2D di parole significative")
+plt.grid(True)
+plt.show()
