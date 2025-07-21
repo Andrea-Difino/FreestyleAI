@@ -28,9 +28,8 @@ def is_informative(word):
         not re.search(r'\d', word)
     )
 
-def train():
-    context_size = 4
-    embedding_dim = 10
+
+def refine_data():
     for _, row in db.iterrows():
         title = row['battle_id']
         text = row['text']
@@ -55,29 +54,36 @@ def train():
         all_words.extend(battles_text_dict[song].split())
 
     vocab = sorted(set(word for word in all_words if word not in ["<START>", "<UNK>", "<END>"]))
+    
     wotoi = {"<START>": 0, "<UNK>": 1, "<END>": 2}
+
     for i, word in enumerate(sorted(vocab), start=3):
         wotoi[word] = i
+
     itow = {i: w for w, i in wotoi.items()}
     vocab_size = len(wotoi)
-    print(wotoi)
-    print(vocab_size)
+    return vocab_size, wotoi, itow
 
-    def word_to_index(word):
-        return wotoi.get(word, wotoi["<UNK>"])
+def n_word_gram(word_to_index, context_size):
+    X, Y = [], []
+    for battle in battles_text_dict.keys():
+        context = [word_to_index["<START>"]] * context_size
+        for word in battles_text_dict[battle].split():
+            ix = word_to_index.get(word, word_to_index["<UNK>"]) 
+            X.append(context.copy())
+            Y.append(ix)
+            context = context[1:] + [ix]
+    return torch.tensor(X, dtype=torch.long), torch.tensor(Y, dtype=torch.long)
 
-    def build_dataset():
-        X, Y = [], []
-        for battle in battles_text_dict.keys():
-            context = [wotoi["<START>"]] * context_size
-            for word in battles_text_dict[battle].split():
-                ix = word_to_index(word)
-                X.append(context.copy())
-                Y.append(ix)
-                context = context[1:] + [ix]
-        return torch.tensor(X, dtype=torch.long), torch.tensor(Y, dtype=torch.long)
+def train():
+    print("Inizio addestramento del modello...")
+    context_size = 4
+    embedding_dim = 10
 
-    Xtr, Ytr = build_dataset()
+    vocab_size, wotoi, itow = refine_data()
+
+    Xtr, Ytr = n_word_gram(wotoi, context_size)
+
     print(f"Dimensione Xtr: {Xtr.shape}")
     dataset = TensorDataset(Xtr, Ytr)
     train_size = int(0.7 * len(dataset))
@@ -95,7 +101,7 @@ def train():
     lossi = []
     min_loss = float('inf')
     counter = 0
-    patience = 2
+    patience = 3
     optimizer = torch.optim.Adam(model.parameters(), lr=0.006)
 
     for epoch in range(20):
@@ -123,7 +129,6 @@ def train():
 
         if epoch_loss < min_loss:
             min_loss = epoch_loss
-            #torch.save(model.state_dict(), f"40tanh512hidden_best_model{epoch_loss:.2f}.pt")
             print("Best Model.")
         else:
             counter += 1
@@ -154,6 +159,7 @@ def train():
     pass
 
 def test_loss(model, test_loader):
+    """Evaluate the model on the test set and print the average loss."""
     model.eval()
     total_loss = 0
     with torch.no_grad():

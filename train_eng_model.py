@@ -31,8 +31,11 @@ def is_informative(word):
     )
 
 def clean_text(text):
+    # Adds space around common punctuation: . , ! ? ( )
     text = re.sub(r'([.,!?()])', r' \1 ', text)
+    # Replaces multiple spaces with a single space
     text = re.sub(r'\s{2,}', ' ', text)
+    # Inserts space around commas between letters (e.g., "word1,word2" -> "word1 , word2")
     text = re.sub(r'([a-zA-Z])[,]([a-zA-Z])', r'\1 , \2', text)
     return text.strip()
 
@@ -108,7 +111,7 @@ def train():
     min_loss = float('inf')
     counter = 0
     patience = 3
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.009)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     for epoch in range(10):
         print(f"Epoch {epoch + 1}/{10}")
@@ -143,6 +146,7 @@ def train():
                 print("Early stopping triggered!")
                 break
 
+    #optimized plot to have a clear view of the loss
     plt.plot(torch.tensor(lossi).view(-1, 43).mean(dim = 1))
     plt.show()
     testLoss = test_loss(model, test_loader)
