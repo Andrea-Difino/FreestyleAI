@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from architecture import WordGramModel
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
+#from sklearn.decomposition import PCA
 import random
 import re
 
@@ -32,59 +32,71 @@ def generate_text(seed_words=None, max_words=50, temperature=1.0):
         seed_words = ["<START>"] * context_size
 
     context = [wotoi.get(word, wotoi["<UNK>"]) for word in seed_words]
-    generated = seed_words.copy()
+    generated_lines = []
     total_entropy = 0
     steps = 0
+    max_lines = 15
 
-    for _ in range(max_words):
-        x = torch.tensor([context], dtype=torch.long).to(device)
-        logits = model(x)
+    print("\nNew Song:\n")
+    for _ in range(max_lines):
+        generated = []
+        for _ in range(max_words):
+            x = torch.tensor([context], dtype=torch.long).to(device)
+            logits = model(x)
 
-        logits = logits / temperature
-        probs = F.softmax(logits, dim=1)
+            logits = logits / temperature
+            probs = F.softmax(logits, dim=1)
 
-        entropy = compute_entropy(probs)
-        total_entropy += entropy
-        steps += 1
+            entropy = compute_entropy(probs)
+            total_entropy += entropy
+            steps += 1
 
-        if entropy < 2.2:
-            temperature += 0.2
-        elif entropy > 4.0:
-            temperature = max(0.5, temperature - 0.1)
+            if entropy < 2.2:
+                temperature += 0.2
+            elif entropy > 4.0:
+                temperature = max(0.5, temperature - 0.1)
 
-        next_indices = torch.multinomial(probs, num_samples=2).squeeze()
+            next_indices = torch.multinomial(probs, num_samples=2).squeeze()
 
-        next_word = "<UNK>"
-        next_ix = next_indices[0].item()
+            next_word = "<UNK>"
+            next_ix = next_indices[0].item()
 
-        for idx in next_indices:
-            word = itow.get(idx.item(), "<UNK>")
-            if word != "<UNK>":
-                next_word = word
-                next_ix = idx.item()
+            for idx in next_indices:
+                word = itow.get(idx.item(), "<UNK>")
+                if word != "<UNK>":
+                    next_word = word
+                    next_ix = idx.item()
+                    break
+
+            generated.append(next_word)
+            context = context[1:] + [next_ix]
+
+            if next_word in ["<END>"]:
+                generated.append('\n')
                 break
+        
+        line = (
+            " ".join(generated)
+            .replace("<START>", "")
+            .replace("<END>", "")
+            .strip()
+        )
+        generated_lines.append(line)
 
-        generated.append(next_word)
-        context = context[1:] + [next_ix]
-
-        if next_word in ["<END>"]:
-            break
 
     avg_entropy = total_entropy / steps if steps > 0 else 0
-    print(f"\nAverage Entropy: {avg_entropy:.4f}")
-    return (
-        " ".join(generated)
-           .replace("<START>", "")
-           .replace("<END>", "")
-           .strip()
-    )
+    #print(f"\nAverage Entropy: {avg_entropy:.4f}")
+    song = "\n".join(generated_lines)
+    with open("generated_rap_songs.txt", '+a') as f: 
+        f.write("\nNew Song \n" + song + "\n")
+    return song
 
 if __name__ == "__main__":
-    for _ in range(20):
+    for _ in range(10):
         print(generate_text())
 
 """View the space rapresentation of the words to check for generalizations"""
-top_n = 200
+'''top_n = 200
 words_sub = []
 embedding_sub = []
 casual_words = random.sample(list(itow.items()), top_n)
@@ -107,4 +119,4 @@ for idx, (x, y) in enumerate(embedding_2d):
 
 plt.title("Embedding 2D di parole significative")
 plt.grid(True)
-plt.show()
+plt.show()'''
