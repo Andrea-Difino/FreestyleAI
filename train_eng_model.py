@@ -17,10 +17,10 @@ songs_names = list(dict.fromkeys(db['song']))
 song_lyrics_dict = {title: "" for title in songs_names}
 
 batch_size = 64 #sequences to be processed in parallel
-block_size = 128 #number of words to be processed in parallel = (context_size)
-max_iters = 4500 #number of iterations to train
+block_size = 16 #number of words to be processed in parallel = (context_size)
+max_iters = 8000 #number of iterations to train
 eval_interval = 50 #how many iterations to wait before evaluating the model
-learning_rate = 8e-3 #learning rate for the optimizer
+learning_rate = 1e-4 #learning rate for the optimizer
 eval_iters = 200
 n_embd = 256
 
@@ -47,7 +47,7 @@ def refine_data():
         title = row['song']
         lyrics = row['lyric']
         cleaned_lyrics = "<START> "
-        clean_text(lyrics)
+        lyrics = clean_text(lyrics)
         for word in lyrics.split():
             if is_informative(word):
                 cleaned_lyrics += word + " "
@@ -77,7 +77,7 @@ def refine_data():
     return vocab_size, wotoi, itow
 
 vocab_size, wotoi, itow = refine_data()
-decode = lambda l : ''.join([itow[i] for i in l])
+decode = lambda l : ' '.join([itow[i] for i in l])
 
 def encode(words):
     return [wotoi.get(w, wotoi["<UNK>"]) for w in words]
@@ -86,7 +86,7 @@ def divide_data():
     data = torch.tensor([], dtype = torch.long)
 
     for song in song_lyrics_dict.keys():
-        words = ["<START>"] + song_lyrics_dict[song].split() + ["<END>"]
+        words = song_lyrics_dict[song].split()
 
         # Converti parole in indici
         word_indices = torch.tensor(encode(words), dtype = torch.long)
@@ -130,26 +130,31 @@ def train():
 
     min_loss = float('inf')
     counter = 0
-    patience = 10
+    patience = 100
     epoch_losses = []
+    steps_per_epoch = len(train_data) // (batch_size * block_size)
 
     for epoch in range(max_iters):
         print(f"Epoch {epoch + 1}/{max_iters}") 
-        
-        xb,yb = get_batch('train')
+        total_train_loss = 0
+        for _ in range(steps_per_epoch):
+            xb, yb = get_batch('train')
+            logits, loss = model(xb, yb)
+            
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            optimizer.step()
 
-        logits, loss = model(xb,yb)
+            total_train_loss += loss.item()
 
-        epoch_losses.append(loss)
-        optimizer.zero_grad(set_to_none = True)
-        loss.backward()
-        optimizer.step()
+        avg_train_loss = total_train_loss / steps_per_epoch
+        epoch_losses.append(avg_train_loss)
 
-        epoch_loss = sum(epoch_losses) / len(epoch_losses)
-        print(f"\nEpoch {epoch + 1} average loss: {epoch_loss:.4f}")
+        print(f"Avg train loss: {avg_train_loss:.4f}")
 
-        if epoch_loss < min_loss:
-            min_loss = epoch_loss
+        if avg_train_loss < min_loss:
+            min_loss = avg_train_loss
+            counter = 0
             print("Best Model.")
         else:
             counter += 1
@@ -157,10 +162,11 @@ def train():
                 print("Early stopping triggered!")
                 break
 
-    #optimized plot to have a clear view of the loss
-    window = 10 
-    smoothed = torch.tensor(epoch_losses).view(-1, window).mean(dim=1)
-    plt.plot(smoothed)
+    plt.plot(torch.tensor(epoch_losses))
+    plt.title("Train loss per epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.show()
 
     losses = estimate_loss()
     print(losses)

@@ -3,11 +3,10 @@ import torch
 import torch.nn.functional as F
 
 batch_size = 64 #sequences to be processed in parallel
-block_size = 128 #number of words to be processed in parallel
+block_size = 16 #number of words to be processed in parallel
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
-print(device)
 n_embd = 256
-n_head = 4
+n_head = 4 #n_head = n_embd // batch_size
 dropout = 0.2
 
 class Head(nn.Module): 
@@ -28,7 +27,7 @@ class Head(nn.Module):
       v = self.value(x)
 
       #compute attention scores "affinities"
-      wei = k @ q.transpose(-2 , -1) * C**-0.5
+      wei = q @ k.transpose(-2 , -1) * C**-0.5
       wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
       wei = F.softmax(wei,dim=-1) #softmax over rows
 
@@ -75,8 +74,8 @@ class Block(nn.Module):
       self.ln2 = nn.LayerNorm(n_embd)
 
     def forward(self , x): 
-      x = x + self.sa(self.ln1(x))
-      x = x + self.ffwd(self.ln2(x))
+      x = self.ln1(x + self.sa(x))
+      x = self.ln2(x + self.ffwd(x))
       return x
 
 class WordGramModel(nn.Module):
@@ -90,7 +89,10 @@ class WordGramModel(nn.Module):
             Block(n_embd),
             nn.LayerNorm(n_embd)
         )
-        self.output = nn.Linear(n_embd, vocab_size)
+        self.output = nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(n_embd, vocab_size)
+        )
 
     def forward(self, x, targets = None):
         B, T = x.shape

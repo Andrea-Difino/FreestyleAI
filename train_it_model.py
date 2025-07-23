@@ -74,7 +74,7 @@ def divide_data():
     data = torch.tensor([], dtype = torch.long)
 
     for battle in battles_text_dict.keys():
-        words = ["<START>"] + battles_text_dict[battle].split() + ["<END>"]
+        words = battles_text_dict[battle].split()
 
         # Converti parole in indici
         word_indices = torch.tensor(encode(words), dtype = torch.long)
