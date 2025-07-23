@@ -14,7 +14,7 @@ db = pd.read_csv('FreestyleDataset.csv', usecols=["battle_id", "text", "line_num
 batch_size = 4 #sequences to be processed in parallel
 block_size = 16 #number of words to be processed in parallel = (context_size)
 max_iters = 300 #number of iterations to train
-eval_interval = 20 #how many iterations to wait before evaluating the model
+eval_interval = 50 #how many iterations to wait before evaluating the model
 learning_rate = 3e-4 #learning rate for the optimizer
 eval_iters = 200
 n_embd = 32
@@ -143,14 +143,14 @@ def train():
         if epoch_loss < min_loss:
             min_loss = epoch_loss
             print("Best Model.")
-        '''else:
+        else:
             counter += 1
             if counter >= patience:
                 print("Early stopping triggered!")
-                break'''
+                break
 
     #optimized plot to have a clear view of the loss
-    window = 10  # numero di epoche da mediare
+    window = 10 
     smoothed = torch.tensor(epoch_losses).view(-1, window).mean(dim=1)
     plt.plot(smoothed)
 
@@ -159,14 +159,14 @@ def train():
     with open('performance_log.txt', 'a') as f:
             f.write(performanceLog)
 
-    torch.save(model.state_dict(), 'models/ita-word-gram_model.pt')
+    torch.save(model.state_dict(), 'models/it-word-gram_model.pt')
     metadata = {
         "wotoi": wotoi,
         "itow": itow,
         "context_size": block_size,
         "embedding_dim": n_embd
     }
-    torch.save(metadata, 'metadata/ita-word-gram_metadata.pt')
+    torch.save(metadata, 'metadata/it-word-gram_metadata.pt')
 
 if __name__ == "__main__":
     train()

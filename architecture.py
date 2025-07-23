@@ -2,12 +2,12 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-batch_size = 4 #sequences to be processed in parallel
+batch_size = 512 #sequences to be processed in parallel
 block_size = 16 #number of characters to be processed in parallel
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
 print(device)
-n_embd = 32
-n_head = 4
+n_embd = 1024
+n_head = 2
 dropout = 0.2
 
 class Head(nn.Module): 
@@ -25,7 +25,7 @@ class Head(nn.Module):
       B,T,C = x.shape
       k = self.key(x)
       q = self.query(x)
-      v = self.query(x)
+      v = self.value(x)
 
       #compute attention scores "affinities"
       wei = k @ q.transpose(-2 , -1) * C**-0.5
