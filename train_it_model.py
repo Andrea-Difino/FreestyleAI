@@ -124,10 +124,6 @@ def train():
     for epoch in range(max_iters):
         print(f"Epoch {epoch + 1}/{max_iters}") 
 
-        if epoch % eval_interval == 0: 
-            losses = estimate_loss()
-            print(f"epoch {epoch}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-
         xb,yb = get_batch('train')
 
         logits, loss = model(xb,yb)
@@ -154,7 +150,8 @@ def train():
     smoothed = torch.tensor(epoch_losses).view(-1, window).mean(dim=1)
     plt.plot(smoothed)
 
-    performanceLog = f'\nIt-Model\nTraining loss: {epoch_losses[-1]:.4f} - Test loss : {estimate_loss()}\n' + f'Vocab: {vocab_size}W , Architecture: cs{block_size}-ed{n_embd}\n'
+    losses = estimate_loss()
+    performanceLog = f'\nIt-Model\nTraining loss: {losses['train']:.4f} - Val loss : {losses['val']:.4f}\n' + f'Vocab: {vocab_size}W , Architecture: cs{block_size}-ed{n_embd}\n'
 
     with open('performance_log.txt', 'a') as f:
             f.write(performanceLog)

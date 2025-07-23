@@ -13,3 +13,7 @@ Vocab: 584W , Architecture: cs4-ed10-hd512
 It-Model
 Training loss: 5.3226 - Test loss : {'train': tensor(5.2258), 'val': tensor(5.7327)}
 Vocab: 584W , Architecture: cs16-ed32
+
+Eng-Model
+Training loss: 3.9527 - Val loss : 4.3094
+Vocab: 34998W , Architecture: cs128-ed256

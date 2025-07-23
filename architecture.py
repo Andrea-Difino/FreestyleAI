@@ -2,12 +2,12 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-batch_size = 512 #sequences to be processed in parallel
-block_size = 16 #number of characters to be processed in parallel
+batch_size = 64 #sequences to be processed in parallel
+block_size = 128 #number of words to be processed in parallel
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
 print(device)
-n_embd = 1024
-n_head = 2
+n_embd = 256
+n_head = 4
 dropout = 0.2
 
 class Head(nn.Module): 

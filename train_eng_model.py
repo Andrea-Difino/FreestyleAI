@@ -9,20 +9,20 @@ from collections import Counter
 from tqdm import tqdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+torch.cuda.empty_cache()
 db = pd.read_csv('updated_rappers.csv', usecols=["song", "lyric"])
 db["lyric"] = db["lyric"].apply(lambda x: x.lower())
 songs_names = list(dict.fromkeys(db['song']))
 
 song_lyrics_dict = {title: "" for title in songs_names}
 
-batch_size = 512 #sequences to be processed in parallel
-block_size = 16 #number of words to be processed in parallel = (context_size)
-max_iters = 5000 #number of iterations to train
+batch_size = 64 #sequences to be processed in parallel
+block_size = 128 #number of words to be processed in parallel = (context_size)
+max_iters = 4500 #number of iterations to train
 eval_interval = 50 #how many iterations to wait before evaluating the model
-learning_rate = 1e-4 #learning rate for the optimizer
+learning_rate = 8e-3 #learning rate for the optimizer
 eval_iters = 200
-n_embd = 1024
+n_embd = 256
 
 
 def is_informative(word):
@@ -165,7 +165,7 @@ def train():
     losses = estimate_loss()
     print(losses)
     # Save performance log
-    performanceLog = f'\nEng-Model\nTraining loss: {losses['train']:.4f} - Val loss : {losses['val']}\n' + f'Vocab: {vocab_size}W , Architecture: cs{block_size}-ed{n_embd}\n'
+    performanceLog = f'\nEng-Model\nTraining loss: {losses['train']:.4f} - Val loss : {losses['val']:.4f}\n' + f'Vocab: {vocab_size}W , Architecture: cs{block_size}-ed{n_embd}\n'
 
     with open('performance_log.txt', 'a') as f:
         f.write(performanceLog)
