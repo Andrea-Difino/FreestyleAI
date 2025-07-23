@@ -4,30 +4,30 @@ import torch
 from architecture import WordGramModel
 from matplotlib import pyplot as plt
 import re
-from torch.utils.data import TensorDataset, DataLoader, random_split
 from collections import Counter
 from tqdm import tqdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("Device in uso:", device)
-
-print("CUDA disponibile:", torch.cuda.is_available())
-print("GPU in uso:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Nessuna")
 
 db = pd.read_csv('FreestyleDataset.csv', usecols=["battle_id", "text", "line_number", "dialect"])
+
+batch_size = 4 #sequences to be processed in parallel
+block_size = 16 #number of words to be processed in parallel = (context_size)
+max_iters = 300 #number of iterations to train
+eval_interval = 20 #how many iterations to wait before evaluating the model
+learning_rate = 3e-4 #learning rate for the optimizer
+eval_iters = 200
+n_embd = 32
 
 battles = list(sorted(set(db["battle_id"])))
 
 battles_text_dict = {title: "" for title in battles}
-
-print(battles_text_dict)
 
 def is_informative(word):
     return (
         not word.isnumeric() and
         not re.search(r'\d', word)
     )
-
 
 def refine_data():
     for _, row in db.iterrows():
@@ -64,65 +64,78 @@ def refine_data():
     vocab_size = len(wotoi)
     return vocab_size, wotoi, itow
 
-def n_word_gram(word_to_index, context_size):
-    X, Y = [], []
+vocab_size, wotoi, itow = refine_data()
+decode = lambda l : ''.join([itow[i] for i in l])
+
+def encode(words):
+    return [wotoi.get(w, wotoi["<UNK>"]) for w in words]
+
+def divide_data():
+    data = torch.tensor([], dtype = torch.long)
+
     for battle in battles_text_dict.keys():
-        context = [word_to_index["<START>"]] * context_size
-        for word in battles_text_dict[battle].split():
-            ix = word_to_index.get(word, word_to_index["<UNK>"]) 
-            X.append(context.copy())
-            Y.append(ix)
-            context = context[1:] + [ix]
-    return torch.tensor(X, dtype=torch.long), torch.tensor(Y, dtype=torch.long)
+        words = ["<START>"] + battles_text_dict[battle].split() + ["<END>"]
+
+        # Converti parole in indici
+        word_indices = torch.tensor(encode(words), dtype = torch.long)
+        data = torch.cat((data, word_indices), dim = 0)
+
+    split_v = int(0.9*len(data))
+    train_data = data[:split_v]
+    val_data = data[split_v:]
+    return train_data, val_data
+
+train_data, val_data = divide_data()
+
+def get_batch(split): 
+    #generate batch of data of inputs x and targets y
+    data = train_data if split == "train" else val_data
+    ix = torch.randint(0, len(data) - block_size, (batch_size,))
+    x = torch.stack([data[i:i+block_size] for i in ix])
+    y = torch.stack([data[i+1:i+block_size+1] for i in ix])
+    return x.to(device),y.to(device)
+
+@torch.no_grad()
+def estimate_loss():
+    out = {}
+    model.eval()
+    for split in ['train', 'val']:
+        losses = torch.zeros(eval_iters)
+        for k in range(eval_iters):
+            xb, yb = get_batch(split)
+            logits, loss = model(xb, yb)
+            losses[k] = loss.item()
+        out[split] = losses.mean()
+    model.train()
+    return out
+
+model = WordGramModel(vocab_size).to(device)
+model.train()
+optimizer = torch.optim.Adam(model.parameters(), learning_rate)
 
 def train():
     print("Inizio addestramento del modello...")
-    context_size = 4
-    embedding_dim = 10
 
-    vocab_size, wotoi, itow = refine_data()
-
-    Xtr, Ytr = n_word_gram(wotoi, context_size)
-
-    print(f"Dimensione Xtr: {Xtr.shape}")
-    dataset = TensorDataset(Xtr, Ytr)
-    train_size = int(0.7 * len(dataset))
-    test_size = len(dataset) - train_size
-    print(train_size)
-    print(test_size)
-
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
-
-    model = WordGramModel(vocab_size, embedding_dim, context_size, hidden_dim=512).to(device)
-    model.train()
-
-    lossi = []
     min_loss = float('inf')
     counter = 0
-    patience = 3
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.006)
+    patience = 10
+    epoch_losses = []
 
-    for epoch in range(20):
-        print(f"Epoch {epoch + 1}/{20}")
-        loop = tqdm(train_loader, leave=False)
-        epoch_losses = []
-        for x_batch, y_batch in loop:
-            x_batch, y_batch = x_batch.to(device), y_batch.to(device)
+    for epoch in range(max_iters):
+        print(f"Epoch {epoch + 1}/{max_iters}") 
 
-            logits = model(x_batch)
-            loss = F.cross_entropy(logits, y_batch)
+        if epoch % eval_interval == 0: 
+            losses = estimate_loss()
+            print(f"epoch {epoch}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+        xb,yb = get_batch('train')
 
-            lossi.append(loss.item())
-            epoch_losses.append(loss.item())
+        logits, loss = model(xb,yb)
 
-            loop.set_description(f"Epoch {epoch + 1}")
-            loop.set_postfix(loss=loss.item())
+        epoch_losses.append(loss)
+        optimizer.zero_grad(set_to_none = True)
+        loss.backward()
+        optimizer.step()
 
         epoch_loss = sum(epoch_losses) / len(epoch_losses)
         print(f"\nEpoch {epoch + 1} average loss: {epoch_loss:.4f}")
@@ -130,18 +143,18 @@ def train():
         if epoch_loss < min_loss:
             min_loss = epoch_loss
             print("Best Model.")
-        else:
+        '''else:
             counter += 1
             if counter >= patience:
                 print("Early stopping triggered!")
-                break
+                break'''
 
     #optimized plot to have a clear view of the loss
-    plt.plot(torch.tensor(lossi).view(-1, 43).mean(dim = 1))
-    plt.show()
-    testLoss = test_loss(model, test_loader)
+    window = 10  # numero di epoche da mediare
+    smoothed = torch.tensor(epoch_losses).view(-1, window).mean(dim=1)
+    plt.plot(smoothed)
 
-    performanceLog = f'\nIt-Model\nTraining loss: {lossi[-1]:.4f} - Test loss : {testLoss}\n' + f'Vocab: {vocab_size}W , Architecture: cs{context_size}-ed{embedding_dim}-hd{512}\n'
+    performanceLog = f'\nIt-Model\nTraining loss: {epoch_losses[-1]:.4f} - Test loss : {estimate_loss()}\n' + f'Vocab: {vocab_size}W , Architecture: cs{block_size}-ed{n_embd}\n'
 
     with open('performance_log.txt', 'a') as f:
             f.write(performanceLog)
@@ -150,27 +163,10 @@ def train():
     metadata = {
         "wotoi": wotoi,
         "itow": itow,
-        "context_size": context_size,
-        "embedding_dim": embedding_dim,
-        "hidden_dim": 512
+        "context_size": block_size,
+        "embedding_dim": n_embd
     }
     torch.save(metadata, 'metadata/ita-word-gram_metadata.pt')
-
-    pass
-
-def test_loss(model, test_loader):
-    """Evaluate the model on the test set and print the average loss."""
-    model.eval()
-    total_loss = 0
-    with torch.no_grad():
-        for x_batch, y_batch in test_loader:
-            x_batch, y_batch = x_batch.to(device), y_batch.to(device)
-            logits = model(x_batch)
-            loss = F.cross_entropy(logits, y_batch)
-            total_loss += loss.item()
-    test_loss = total_loss / len(test_loader)
-    print(f"Test Loss: {test_loss:.4f}")
-    return test_loss
 
 if __name__ == "__main__":
     train()

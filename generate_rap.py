@@ -6,19 +6,17 @@ import matplotlib.pyplot as plt
 import random
 import re
 
-metadata = torch.load('metadata/eng-word-gram_metadata.pt')
+metadata = torch.load('metadata/it-word-gram_metadata.pt')
 wotoi = metadata['wotoi']
 itow = metadata['itow']
 context_size = metadata['context_size']
 embedding_dim = metadata['embedding_dim']
-hidden_dim = metadata['hidden_dim']
 
 vocab_size = len(wotoi)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = WordGramModel(vocab_size, embedding_dim, context_size, hidden_dim)
-model.load_state_dict(torch.load('models/eng-word-gram_model.pt', map_location=device))
-embedding_matrix = model.embedding.weight.detach()
+model = WordGramModel(vocab_size)
+model.load_state_dict(torch.load('models/it-word-gram_model.pt', map_location=device))
 model.to(device)
 model.eval()
 
@@ -42,10 +40,11 @@ def generate_song(seed_words=None, max_words=50, temperature=1.0):
         generated = []
         for _ in range(max_words):
             x = torch.tensor([context], dtype=torch.long).to(device)
-            logits = model(x)
+            logits, loss = model(x)
 
             logits = logits / temperature
-            probs = F.softmax(logits, dim=1)
+            logits = logits[:,-1,:]
+            probs = F.softmax(logits, dim=-1)
 
             entropy = compute_entropy(probs)
             total_entropy += entropy
@@ -102,11 +101,12 @@ def generate_lyric(seed_words=None, max_words=50, temperature=1.0):
 
     for _ in range(max_words):
         x = torch.tensor([context], dtype=torch.long).to(device)
-        logits = model(x)
+        logits, loss = model(x)
 
         logits = logits / temperature
-        probs = F.softmax(logits, dim=1)
-
+        logits = logits[:,-1,:]
+        probs = F.softmax(logits, dim=-1)
+        
         entropy = compute_entropy(probs)
         total_entropy += entropy
         steps += 1
@@ -146,7 +146,7 @@ def generate_lyric(seed_words=None, max_words=50, temperature=1.0):
 
 if __name__ == "__main__":
     for _ in range(10):
-        print(generate_song())
+        print(generate_lyric())
 
 """View the space rapresentation of the words to check for generalizations"""
 '''top_n = 200

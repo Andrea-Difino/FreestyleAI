@@ -1,26 +1,112 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 
-class WordGramModel(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, context_size, hidden_dim):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.fc1 = nn.Linear(context_size * embedding_dim, hidden_dim)
-        self.ln1 = nn.LayerNorm(hidden_dim)
-        self.dropout = nn.Dropout(0.15)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.ln2 = nn.LayerNorm(hidden_dim)
-        self.output = nn.Linear(hidden_dim, vocab_size)
+batch_size = 4 #sequences to be processed in parallel
+block_size = 16 #number of characters to be processed in parallel
+device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
+print(device)
+n_embd = 32
+n_head = 4
+dropout = 0.2
+
+class Head(nn.Module): 
+    """one head of self-attention"""
+    def __init__(self, head_size):
+      super().__init__()
+      self.query = nn.Linear(n_embd, head_size, bias=False)
+      self.key = nn.Linear(n_embd, head_size, bias=False)
+      self.value = nn.Linear(n_embd, head_size, bias=False)
+      self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+
+      self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        emb = self.embedding(x)
-        emb = emb.view(emb.size(0), -1)
+      B,T,C = x.shape
+      k = self.key(x)
+      q = self.query(x)
+      v = self.query(x)
 
-        h1 = torch.tanh(self.ln1(self.fc1(emb)))
-        h1 = self.dropout(h1)
+      #compute attention scores "affinities"
+      wei = k @ q.transpose(-2 , -1) * C**-0.5
+      wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+      wei = F.softmax(wei,dim=-1) #softmax over rows
 
-        h2 = torch.tanh(self.ln2(self.fc2(h1)))
-        h2 = self.dropout(h2)
+      wei = self.dropout(wei)
 
-        logits = self.output(h2)
-        return logits
+      out = wei @ v
+      return out
+    
+class MultiHeadAttention(nn.Module): 
+    """multiple heads running in parallel"""
+    def __init__(self, head_size):
+      super().__init__()
+      self.heads = nn.ModuleList([Head(head_size) for _ in range(n_head)])
+      self.proj = nn.Linear(n_embd, n_embd)
+      self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x): 
+      out = torch.cat([h(x) for h in self.heads], dim=-1)
+      out = self.dropout(self.proj(out))
+      return out
+    
+class FeedForward(nn.Module): 
+
+    def __init__(self, n_emb):
+      super().__init__()
+      self.net = nn.Sequential(
+         nn.Linear(n_emb, 4 * n_emb),
+         nn.ReLU(),
+         nn.Linear(4 * n_emb, n_emb),
+         nn.Dropout(.2)
+      )    
+
+    def forward(self, x):
+      return self.net(x)
+
+class Block(nn.Module): 
+
+    def __init__(self, n_embd):
+      super().__init__()
+      head_size = n_embd // n_head
+      self.sa = MultiHeadAttention(head_size)
+      self.ffwd = FeedForward(n_embd) 
+      self.ln1 = nn.LayerNorm(n_embd)
+      self.ln2 = nn.LayerNorm(n_embd)
+
+    def forward(self , x): 
+      x = x + self.sa(self.ln1(x))
+      x = x + self.ffwd(self.ln2(x))
+      return x
+
+class WordGramModel(nn.Module):
+    def __init__(self, vocab_size):
+        super().__init__()
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.positional_embedding = nn.Embedding(block_size, n_embd)
+        self.blocks = nn.Sequential(
+            Block(n_embd),
+            Block(n_embd),
+            Block(n_embd),
+            nn.LayerNorm(n_embd)
+        )
+        self.output = nn.Linear(n_embd, vocab_size)
+
+    def forward(self, x, targets = None):
+        B, T = x.shape
+        tok_emb = self.token_embedding_table(x)
+        pos_emb = self.positional_embedding(torch.arange(T, device=device))
+        x = tok_emb + pos_emb
+
+        x = self.blocks(x)
+        logits = self.output(x)
+        
+        if targets == None: 
+            loss = None
+        else:
+            B, T, C = logits.shape
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits, targets)
+
+        return logits, loss
