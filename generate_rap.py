@@ -27,7 +27,7 @@ def compute_entropy(probs):
     entropy = -(probs * log_probs).sum(dim=1)
     return entropy.mean().item()
 
-def generate_text(seed_words=None, max_words=50, temperature=1.0):
+def generate_song(seed_words=None, max_words=50, temperature=1.0):
     if seed_words is None:
         seed_words = ["<START>"] * context_size
 
@@ -84,16 +84,69 @@ def generate_text(seed_words=None, max_words=50, temperature=1.0):
         generated_lines.append(line)
 
 
-    avg_entropy = total_entropy / steps if steps > 0 else 0
+    #avg_entropy = total_entropy / steps if steps > 0 else 0
     #print(f"\nAverage Entropy: {avg_entropy:.4f}")
     song = "\n".join(generated_lines)
     with open("generated_rap_songs.txt", '+a') as f: 
         f.write("\nNew Song \n" + song + "\n")
     return song
 
+def generate_lyric(seed_words=None, max_words=50, temperature=1.0):
+    if seed_words is None:
+        seed_words = ["<START>"] * context_size
+
+    context = [wotoi.get(word, wotoi["<UNK>"]) for word in seed_words]
+    generated = []
+    total_entropy = 0
+    steps = 0
+
+    for _ in range(max_words):
+        x = torch.tensor([context], dtype=torch.long).to(device)
+        logits = model(x)
+
+        logits = logits / temperature
+        probs = F.softmax(logits, dim=1)
+
+        entropy = compute_entropy(probs)
+        total_entropy += entropy
+        steps += 1
+
+        if entropy < 2.2:
+            temperature += 0.2
+        elif entropy > 4.0:
+            temperature = max(0.5, temperature - 0.1)
+
+        next_indices = torch.multinomial(probs, num_samples=2).squeeze()
+
+        next_word = "<UNK>"
+        next_ix = next_indices[0].item()
+
+        for idx in next_indices:
+            word = itow.get(idx.item(), "<UNK>")
+            if word != "<UNK>":
+                next_word = word
+                next_ix = idx.item()
+                break
+
+        generated.append(next_word)
+        context = context[1:] + [next_ix]
+
+        if next_word in ["<END>"]:
+            break
+
+    #avg_entropy = total_entropy / steps if steps > 0 else 0
+    #print(f"\nAverage Entropy: {avg_entropy:.4f}")
+    return (
+        " ".join(generated)
+           .replace("<START>", "")
+           .replace("<END>", "")
+           .strip()
+    )
+
+
 if __name__ == "__main__":
     for _ in range(10):
-        print(generate_text())
+        print(generate_song())
 
 """View the space rapresentation of the words to check for generalizations"""
 '''top_n = 200
