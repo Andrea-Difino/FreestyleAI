@@ -135,10 +135,6 @@ def train():
 
     for epoch in range(max_iters):
         print(f"Epoch {epoch + 1}/{max_iters}") 
-
-        if epoch % eval_interval == 0: 
-            losses = estimate_loss()
-            print(f"epoch {epoch}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         
         xb,yb = get_batch('train')
 
@@ -167,6 +163,7 @@ def train():
     plt.plot(smoothed)
 
     losses = estimate_loss()
+    print(losses)
     # Save performance log
     performanceLog = f'\nEng-Model\nTraining loss: {losses['train']:.4f} - Val loss : {losses['val']}\n' + f'Vocab: {vocab_size}W , Architecture: cs{block_size}-ed{n_embd}\n'
 
