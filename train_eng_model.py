@@ -19,7 +19,6 @@ song_lyrics_dict = {title: "" for title in songs_names}
 batch_size = 64 #sequences to be processed in parallel
 block_size = 32 #number of words to be processed in parallel = (context_size)
 max_iters = 8000 #number of iterations to train
-eval_interval = 50 #how many iterations to wait before evaluating the model
 learning_rate = 1e-4 #learning rate for the optimizer
 eval_iters = 200
 n_embd = 256
@@ -131,10 +130,10 @@ def train():
 
     min_loss = float('inf')
     counter = 0
-    patience = 100
+    patience = 15
     epoch_losses = []
     steps_per_epoch = 2000
-    epochs = 30
+    epochs = 40
  
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs}") 
@@ -161,7 +160,6 @@ def train():
         if avg_train_loss < min_loss:
             min_loss = avg_train_loss
             counter = 0
-            print("Best Model.")
         else:
             counter += 1
             if counter >= patience:
