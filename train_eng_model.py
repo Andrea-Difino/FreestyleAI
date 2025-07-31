@@ -17,7 +17,7 @@ songs_names = list(dict.fromkeys(db['song']))
 song_lyrics_dict = {title: "" for title in songs_names}
 
 batch_size = 64 #sequences to be processed in parallel
-block_size = 16 #number of words to be processed in parallel = (context_size)
+block_size = 32 #number of words to be processed in parallel = (context_size)
 max_iters = 8000 #number of iterations to train
 eval_interval = 50 #how many iterations to wait before evaluating the model
 learning_rate = 1e-4 #learning rate for the optimizer
@@ -172,14 +172,16 @@ def train():
     plt.title("Train loss per epoch")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
+    plt.savefig("performances/loss_plot.png")
     plt.show()
+    plt.close()
 
     losses = estimate_loss()
     print(losses)
     # Save performance log
     performanceLog = f'\nEng-Model\nTraining loss: {losses['train']:.4f} - Val loss : {losses['val']:.4f}\n' + f'Vocab: {vocab_size}W , Architecture: cs{block_size}-ed{n_embd}\n'
 
-    with open('performance_log.txt', 'a') as f:
+    with open('performance/performance_log.txt', 'a') as f:
         f.write(performanceLog)
 
     torch.save(model.state_dict(), 'models/eng-word-gram_model.pt')

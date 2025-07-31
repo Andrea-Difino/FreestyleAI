@@ -21,3 +21,7 @@ Vocab: 34998W , Architecture: cs128-ed256
 Eng-Model
 Training loss: 4.4862 - Val loss : 4.7350
 Vocab: 34998W , Architecture: cs16-ed256
+
+Eng-Model
+Training loss: 4.0135 - Val loss : 4.3826
+Vocab: 34998W , Architecture: cs32-ed256

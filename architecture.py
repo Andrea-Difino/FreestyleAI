@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 batch_size = 64 #sequences to be processed in parallel
-block_size = 16 #number of words to be processed in parallel
+block_size = 32 #number of words to be processed in parallel
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
 n_embd = 256
 n_head = 4 #n_head = n_embd // batch_size

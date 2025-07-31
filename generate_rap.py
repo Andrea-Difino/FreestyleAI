@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import random
 import re
 
-metadata = torch.load('metadata/it-word-gram_metadata.pt')
+metadata = torch.load('metadata/eng-word-gram_metadata.pt')
 wotoi = metadata['wotoi']
 itow = metadata['itow']
 context_size = metadata['context_size']
@@ -16,7 +16,7 @@ vocab_size = len(wotoi)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = WordGramModel(vocab_size)
-model.load_state_dict(torch.load('models/it-word-gram_model.pt', map_location=device))
+model.load_state_dict(torch.load('models/eng-word-gram_model.pt', map_location=device))
 model.to(device)
 model.eval()
 
@@ -86,7 +86,7 @@ def generate_song(seed_words=None, max_words=50, temperature=1.0):
     #avg_entropy = total_entropy / steps if steps > 0 else 0
     #print(f"\nAverage Entropy: {avg_entropy:.4f}")
     song = "\n".join(generated_lines)
-    with open("generated_rap_songs.txt", '+a') as f: 
+    with open("generated_rap_songs.txt", 'w') as f: 
         f.write("\nNew Song \n" + song + "\n")
     return song
 
