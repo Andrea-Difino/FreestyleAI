@@ -4,7 +4,7 @@ import torch
 from architecture import WordGramModel
 from matplotlib import pyplot as plt
 import re
-from torch.utils.data import TensorDataset, DataLoader, random_split
+from sklearn.model_selection import train_test_split
 from collections import Counter
 from tqdm import tqdm
 
@@ -18,9 +18,8 @@ song_lyrics_dict = {title: "" for title in songs_names}
 
 batch_size = 64 #sequences to be processed in parallel
 block_size = 32 #number of words to be processed in parallel = (context_size)
-max_iters = 8000 #number of iterations to train
-learning_rate = 1e-4 #learning rate for the optimizer
-eval_iters = 200
+learning_rate = 0.2 #learning rate for the optimizer
+eval_iters = 300
 n_embd = 256
 
 
@@ -75,29 +74,35 @@ def refine_data():
 
     return vocab_size, wotoi, itow
 
-vocab_size, wotoi, itow = refine_data()
-decode = lambda l : ' '.join([itow[i] for i in l])
-
 def encode(words):
     return [wotoi.get(w, wotoi["<UNK>"]) for w in words]
 
 def divide_data():
-    data = torch.tensor([], dtype = torch.long)
+    # Lista dei titoli delle canzoni
+    song_titles = list(song_lyrics_dict.keys())
 
-    for song in song_lyrics_dict.keys():
-        words = song_lyrics_dict[song].split()
+    # Divisione stratificata: 90% train, 10% val
+    train_songs, val_songs = train_test_split(song_titles, test_size=0.1, random_state=42)
 
-        # Converti parole in indici
-        word_indices = torch.tensor(encode(words), dtype = torch.long)
-        data = torch.cat((data, word_indices), dim = 0)
+    def make_tensor(songs):
+        data = torch.tensor([], dtype=torch.long)
+        for title in songs:
+            words = song_lyrics_dict[title].split()
+            word_indices = torch.tensor(encode(words), dtype=torch.long)
+            data = torch.cat((data, word_indices), dim=0)
+        return data
 
-    split_v = int(0.9*len(data))
-    train_data = data[:split_v]
-    val_data = data[split_v:]
+    train_data = make_tensor(train_songs)
+    val_data = make_tensor(val_songs)
+
     return train_data, val_data
 
-train_data, val_data = divide_data()
-print(len(train_data))
+def prepare_dataset():
+    vocab_size, wotoi_, itow_ = refine_data()
+    train_data, val_data = divide_data()
+    return vocab_size, wotoi_, itow_, train_data, val_data
+
+vocab_size, wotoi, itow, train_data, val_data = prepare_dataset()
 
 def get_batch(split): 
     #generate batch of data of inputs x and targets y
@@ -123,17 +128,17 @@ def estimate_loss():
 
 model = WordGramModel(vocab_size).to(device)
 model.train()
-optimizer = torch.optim.Adam(model.parameters(), learning_rate)
-
+optimizer = torch.optim.SGD(model.parameters(), learning_rate, momentum=0.9)
+ 
 def train():
     print("Inizio addestramento del modello...")
 
     min_loss = float('inf')
     counter = 0
-    patience = 15
+    patience = 10
     epoch_losses = []
-    steps_per_epoch = 2000
-    epochs = 40
+    steps_per_epoch = 2500
+    epochs = 60
  
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs}") 
@@ -170,7 +175,7 @@ def train():
     plt.title("Train loss per epoch")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.savefig("performances/loss_plot.png")
+    plt.savefig("performance/loss_plot.png")
     plt.show()
     plt.close()
 

@@ -25,25 +25,21 @@ def compute_entropy(probs):
     entropy = -(probs * log_probs).sum(dim=1)
     return entropy.mean().item()
 
-def generate_song(seed_words=None, max_words=50, temperature=1.0):
+def generate_sequence(seed_words=None, max_words=50, max_lines=None, temperature=1.0):
     if seed_words is None:
-        seed_words = ["<START>"] * context_size
+        seed_words = ["<START>"]
 
     context = [wotoi.get(word, wotoi["<UNK>"]) for word in seed_words]
     generated_lines = []
     total_entropy = 0
     steps = 0
-    max_lines = 15
 
-    print("\nNew Song:\n")
-    for _ in range(max_lines):
+    while True:
         generated = []
         for _ in range(max_words):
             x = torch.tensor([context], dtype=torch.long).to(device)
-            logits, loss = model(x)
-
-            logits = logits / temperature
-            logits = logits[:,-1,:]
+            logits, _ = model(x)
+            logits = logits[:, -1, :] / temperature
             probs = F.softmax(logits, dim=-1)
 
             entropy = compute_entropy(probs)
@@ -56,10 +52,8 @@ def generate_song(seed_words=None, max_words=50, temperature=1.0):
                 temperature = max(0.5, temperature - 0.1)
 
             next_indices = torch.multinomial(probs, num_samples=2).squeeze()
-
             next_word = "<UNK>"
             next_ix = next_indices[0].item()
-
             for idx in next_indices:
                 word = itow.get(idx.item(), "<UNK>")
                 if word != "<UNK>":
@@ -70,78 +64,28 @@ def generate_song(seed_words=None, max_words=50, temperature=1.0):
             generated.append(next_word)
             context = context[1:] + [next_ix]
 
-            if next_word in ["<END>"]:
-                generated.append('\n')
+            if next_word == "<END>":
                 break
-        
-        line = (
-            " ".join(generated)
-            .replace("<START>", "")
-            .replace("<END>", "")
-            .strip()
-        )
+
+        line = " ".join(generated).replace("<START>", "").replace("<END>", "").strip()
         generated_lines.append(line)
 
-
-    #avg_entropy = total_entropy / steps if steps > 0 else 0
-    #print(f"\nAverage Entropy: {avg_entropy:.4f}")
-    song = "\n".join(generated_lines)
-    with open("generated_rap_songs.txt", 'w') as f: 
-        f.write("\nNew Song \n" + song + "\n")
-    return song
-
-def generate_lyric(seed_words=None, max_words=50, temperature=1.0):
-    if seed_words is None:
-        seed_words = ["<START>"] * context_size
-
-    context = [wotoi.get(word, wotoi["<UNK>"]) for word in seed_words]
-    generated = []
-    total_entropy = 0
-    steps = 0
-
-    for _ in range(max_words):
-        x = torch.tensor([context], dtype=torch.long).to(device)
-        logits, loss = model(x)
-
-        logits = logits / temperature
-        logits = logits[:,-1,:]
-        probs = F.softmax(logits, dim=-1)
-        
-        entropy = compute_entropy(probs)
-        total_entropy += entropy
-        steps += 1
-
-        if entropy < 2.2:
-            temperature += 0.2
-        elif entropy > 4.0:
-            temperature = max(0.5, temperature - 0.1)
-
-        next_indices = torch.multinomial(probs, num_samples=2).squeeze()
-
-        next_word = "<UNK>"
-        next_ix = next_indices[0].item()
-
-        for idx in next_indices:
-            word = itow.get(idx.item(), "<UNK>")
-            if word != "<UNK>":
-                next_word = word
-                next_ix = idx.item()
+        if max_lines is not None:
+            if len(generated_lines) >= max_lines:
                 break
-
-        generated.append(next_word)
-        context = context[1:] + [next_ix]
-
-        if next_word in ["<END>"]:
+        else:
             break
 
-    #avg_entropy = total_entropy / steps if steps > 0 else 0
-    #print(f"\nAverage Entropy: {avg_entropy:.4f}")
-    return (
-        " ".join(generated)
-           .replace("<START>", "")
-           .replace("<END>", "")
-           .strip()
-    )
+    return "\n".join(generated_lines)
+
+def generate_song(seed_words=None):
+    song = generate_sequence(seed_words, max_words=50, max_lines=15)
+    with open("generated_rap_songs.txt", 'w') as f: 
+        f.write("\nNew Song\n" + song + "\n")
+    return song
+
+def generate_lyric(seed_words=None):
+    return generate_sequence(seed_words, max_words=50)
 
 
 if __name__ == "__main__":
