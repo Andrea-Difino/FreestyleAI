@@ -98,6 +98,7 @@ def divide_data():
     return train_data, val_data
 
 train_data, val_data = divide_data()
+print(len(train_data))
 
 def get_batch(split): 
     #generate batch of data of inputs x and targets y
@@ -132,12 +133,16 @@ def train():
     counter = 0
     patience = 100
     epoch_losses = []
-    steps_per_epoch = len(train_data) // (batch_size * block_size)
-
-    for epoch in range(max_iters):
-        print(f"Epoch {epoch + 1}/{max_iters}") 
+    steps_per_epoch = 2000
+    epochs = 30
+ 
+    for epoch in range(epochs):
+        print(f"Epoch {epoch + 1}/{epochs}") 
         total_train_loss = 0
-        for _ in range(steps_per_epoch):
+
+        pbar = tqdm(range(steps_per_epoch), desc="Training", leave=False)
+
+        for _ in pbar:
             xb, yb = get_batch('train')
             logits, loss = model(xb, yb)
             
@@ -146,6 +151,7 @@ def train():
             optimizer.step()
 
             total_train_loss += loss.item()
+            pbar.set_postfix(loss=loss.item())
 
         avg_train_loss = total_train_loss / steps_per_epoch
         epoch_losses.append(avg_train_loss)

@@ -5,6 +5,9 @@ audio/*
 models/*
 trascrizioni/*
 genius_rap_api/*
+video_converter.py
+train_it_model.py 
+songs_audio/*
 
 #model and datasets
 *.csv
