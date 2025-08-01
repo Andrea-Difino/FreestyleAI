@@ -18,8 +18,8 @@ song_lyrics_dict = {title: "" for title in songs_names}
 
 batch_size = 64 #sequences to be processed in parallel
 block_size = 32 #number of words to be processed in parallel = (context_size)
-learning_rate = 0.2 #learning rate for the optimizer
-eval_iters = 300
+learning_rate = 0.05 #learning rate for the optimizer
+eval_iters = 200
 n_embd = 256
 
 
@@ -74,6 +74,8 @@ def refine_data():
 
     return vocab_size, wotoi, itow
 
+vocab_size, wotoi, itow = refine_data()
+
 def encode(words):
     return [wotoi.get(w, wotoi["<UNK>"]) for w in words]
 
@@ -97,12 +99,7 @@ def divide_data():
 
     return train_data, val_data
 
-def prepare_dataset():
-    vocab_size, wotoi_, itow_ = refine_data()
-    train_data, val_data = divide_data()
-    return vocab_size, wotoi_, itow_, train_data, val_data
-
-vocab_size, wotoi, itow, train_data, val_data = prepare_dataset()
+train_data, val_data = divide_data()
 
 def get_batch(split): 
     #generate batch of data of inputs x and targets y
