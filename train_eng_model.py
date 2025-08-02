@@ -135,7 +135,7 @@ def train():
     patience = 10
     epoch_losses = []
     steps_per_epoch = 2500
-    epochs = 60
+    epochs = 100
  
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs}") 
