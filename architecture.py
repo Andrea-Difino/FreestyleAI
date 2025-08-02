@@ -13,6 +13,7 @@ class Head(nn.Module):
     """one head of self-attention"""
     def __init__(self, head_size):
       super().__init__()
+      self.head_s = head_size
       self.query = nn.Linear(n_embd, head_size, bias=False)
       self.key = nn.Linear(n_embd, head_size, bias=False)
       self.value = nn.Linear(n_embd, head_size, bias=False)
@@ -27,7 +28,7 @@ class Head(nn.Module):
       v = self.value(x)
 
       #compute attention scores "affinities"
-      wei = q @ k.transpose(-2 , -1) * C**-0.5
+      wei = q @ k.transpose(-2 , -1) * self.head_s**-0.5
       wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
       wei = F.softmax(wei,dim=-1) #softmax over rows
 
@@ -41,7 +42,7 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, head_size):
       super().__init__()
       self.heads = nn.ModuleList([Head(head_size) for _ in range(n_head)])
-      self.proj = nn.Linear(n_embd, n_embd)
+      self.proj = nn.Linear(head_size * n_head, n_embd)
       self.dropout = nn.Dropout(dropout)
 
     def forward(self, x): 
@@ -96,8 +97,13 @@ class WordGramModel(nn.Module):
 
     def forward(self, x, targets = None):
         B, T = x.shape
+
+        assert x.size(1) <= self.positional_embedding.num_embeddings, \
+    f"Input sequence length {x.size(1)} exceeds positional embedding limit {self.positional_embedding.num_embeddings}"
+        assert x.max() < self.token_embedding_table.num_embeddings, \
+    f"Token ID {x.max().item()} out of bounds for embedding size {self.token_embedding_table.num_embeddings}"
         tok_emb = self.token_embedding_table(x)
-        pos_emb = self.positional_embedding(torch.arange(T, device=device))
+        pos_emb = self.positional_embedding(torch.arange(T, device=x.device))
         x = tok_emb + pos_emb
 
         x = self.blocks(x)
