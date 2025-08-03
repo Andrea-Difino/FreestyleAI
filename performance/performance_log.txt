@@ -28,3 +28,6 @@ Vocab: 34998W , Architecture: cs32-ed256
 
 BPE-Model
 Train loss: 1.8134, Val loss: 1.8969
+
+BPE-Model
+Train loss: 1.7931, Val loss: 1.8489

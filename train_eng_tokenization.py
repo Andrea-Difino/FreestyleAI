@@ -14,7 +14,7 @@ merges, max_index, all_indices, ids, vocab = tokenize()
 vocab_size = vocab
  
 # Model config
-batch_size = 64
+batch_size = 256
 block_size = 32
 learning_rate = 0.05
 eval_iters = 200
@@ -23,13 +23,13 @@ n_embd = 256
 # Split token list into training and validation
 
 def divide_data():
-    split_idx = int(0.9 * len(ids))
+    split_idx = int(0.8 * len(ids))
     train_data = torch.tensor(ids[:split_idx], dtype=torch.long)
     val_data = torch.tensor(ids[split_idx:], dtype=torch.long)
     return train_data, val_data
  
-train_data, val_data = divide_data()
-
+train_data, val_data = divide_data() #33.127.904
+print(train_data.shape)
 # Get batch of training data
 
 def get_batch(split):
@@ -69,8 +69,8 @@ def train():
     counter = 0
     patience = 10
     epoch_losses = []
-    steps_per_epoch = 2500
-    epochs = 80
+    steps_per_epoch = 2000
+    epochs = 65
 
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs}")
@@ -120,7 +120,8 @@ def train():
         "merges": merges,
         "max_index": max_index,
         "context_size": block_size,
-        "embedding_dim": n_embd
+        "embedding_dim": n_embd,
+        "vocab-size": vocab_size
     }, 'metadata/bpe-metadata.pt')
 
     with open('performance/performance_log.txt', 'a') as f:

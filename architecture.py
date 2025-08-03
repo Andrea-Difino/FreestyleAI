@@ -2,11 +2,10 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-batch_size = 64 #sequences to be processed in parallel
 block_size = 32 #number of words to be processed in parallel
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
 n_embd = 256
-n_head = 4 #n_head = n_embd // batch_size
+n_head = 4 #n_head = n_embd // head_size
 dropout = 0.2
 
 class Head(nn.Module): 
@@ -98,10 +97,6 @@ class WordGramModel(nn.Module):
     def forward(self, x, targets = None):
         B, T = x.shape
 
-        assert x.size(1) <= self.positional_embedding.num_embeddings, \
-    f"Input sequence length {x.size(1)} exceeds positional embedding limit {self.positional_embedding.num_embeddings}"
-        assert x.max() < self.token_embedding_table.num_embeddings, \
-    f"Token ID {x.max().item()} out of bounds for embedding size {self.token_embedding_table.num_embeddings}"
         tok_emb = self.token_embedding_table(x)
         pos_emb = self.positional_embedding(torch.arange(T, device=x.device))
         x = tok_emb + pos_emb

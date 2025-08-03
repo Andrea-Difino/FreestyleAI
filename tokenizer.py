@@ -1,5 +1,4 @@
 import pandas as pd
-import torch
 
 def get_stats(ids):
     counts = {}
