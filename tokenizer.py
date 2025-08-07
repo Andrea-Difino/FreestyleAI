@@ -132,7 +132,7 @@ def tokenize():
         else:
             ids_int.append(vocab[x])  # byte (int)
 
-    vocab_size = current_index + 800
+    vocab_size = current_index + 850
     num_merges = vocab_size - current_index - 1
 
     merges = {}  # {(pair): new_token_id}
