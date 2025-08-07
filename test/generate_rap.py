@@ -1,12 +1,12 @@
 import torch
 import torch.nn.functional as F
-from architecture import WordGramModel
+from neural_net import WordGramModel
 import matplotlib.pyplot as plt
 #from sklearn.decomposition import PCA
 import random
 import re
 
-metadata = torch.load('metadata/eng-word-gram_metadata.pt')
+metadata = torch.load('FreestyleAI/metadata/eng-word-gram_metadata.pt')
 wotoi = metadata['wotoi']
 itow = metadata['itow']
 context_size = metadata['context_size']
@@ -16,7 +16,7 @@ vocab_size = len(wotoi)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = WordGramModel(vocab_size)
-model.load_state_dict(torch.load('models/eng-word-gram_model.pt', map_location=device))
+model.load_state_dict(torch.load('FreestyleAI/models/eng-word-gram_model.pt', map_location=device))
 model.to(device)
 model.eval()
 
@@ -80,7 +80,7 @@ def generate_sequence(seed_words=None, max_words=50, max_lines=None, temperature
 
 def generate_song(seed_words=None):
     song = generate_sequence(seed_words, max_words=50, max_lines=15)
-    with open("generated_rap_songs.txt", 'w') as f: 
+    with open("generated_songs_wordgram.txt", 'w') as f: 
         f.write("\nNew Song\n" + song + "\n")
     return song
 

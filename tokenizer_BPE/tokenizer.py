@@ -102,7 +102,7 @@ def merge(ids, pair, new_token):
     return newids
 
 def tokenize():
-    db = pd.read_csv('updated_rappers.csv', usecols=["song", "lyric"])
+    db = pd.read_csv('FreestyleAI/updated_rappers.csv', usecols=["song", "lyric"])
 
     tokens = refine_data(db)  # regex tokenize + clean + add special tokens
     ids = tokens_to_bytes(tokens)  # converti in bytes + sep (special tokens rimangono)

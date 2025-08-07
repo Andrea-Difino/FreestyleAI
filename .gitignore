@@ -1,14 +1,9 @@
 .venv/*
 .idea/*
 __pycache__/*
-audio/*
 models/*
-trascrizioni/*
-genius_rap_api/*
-video_converter.py
-train_it_model.py 
-songs_audio/*
-
+temporary_garbage/*
+*/__pycache__/*
 #model and datasets
 *.csv
 *.pt

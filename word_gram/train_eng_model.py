@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 import pandas as pd
 import torch
-from architecture import WordGramModel
+from FreestyleAI import WordGramModel
 from matplotlib import pyplot as plt
 import re
 from sklearn.model_selection import train_test_split
@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.empty_cache()
-db = pd.read_csv('updated_rappers.csv', usecols=["song", "lyric"])
+db = pd.read_csv('FreestyleAI/updated_rappers.csv', usecols=["song", "lyric"])
 db["lyric"] = db["lyric"].apply(lambda x: x.lower())
 songs_names = list(dict.fromkeys(db['song']))
 
@@ -172,7 +172,7 @@ def train():
     plt.title("Train loss per epoch")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.savefig("performance/loss_plot.png")
+    plt.savefig("FreestyleAI/performance/loss_plot.png")
     plt.show()
     plt.close()
 
@@ -181,17 +181,17 @@ def train():
     # Save performance log
     performanceLog = f'\nEng-Model\nTraining loss: {losses['train']:.4f} - Val loss : {losses['val']:.4f}\n' + f'Vocab: {vocab_size}W , Architecture: cs{block_size}-ed{n_embd}\n'
 
-    with open('performance/performance_log.txt', 'a') as f:
+    with open('FreestyleAI/performance/performance_log.txt', 'a') as f:
         f.write(performanceLog)
 
-    torch.save(model.state_dict(), 'models/eng-word-gram_model.pt')
+    torch.save(model.state_dict(), 'FreestyleAI/models/eng-word-gram_model.pt')
     metadata = {
         "wotoi": wotoi,
         "itow": itow,
         "context_size": block_size,
         "embedding_dim": n_embd
     }
-    torch.save(metadata, 'metadata/eng-word-gram_metadata.pt')
+    torch.save(metadata, 'FreestyleAI/metadata/eng-word-gram_metadata.pt')
 
 if __name__ == "__main__":
     train()

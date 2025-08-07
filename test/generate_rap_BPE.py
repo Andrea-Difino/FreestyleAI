@@ -1,9 +1,9 @@
 import torch
 import torch.nn.functional as F
-from ..FreestyleAI.architecture import WordGramModel
-from tokenizer import decode
+from FreestyleAI import WordGramModel
+from ..tokenizer_BPE.tokenizer import decode
 
-metadata = torch.load('metadata/bpe-metadata.pt')
+metadata = torch.load('FreestyleAI/metadata/bpe-metadata.pt')
 merges = metadata["merges"]
 max_index = metadata["max_index"]
 context_size = metadata["context_size"]
@@ -12,7 +12,7 @@ vocab_size = metadata["vocab-size"]
 reverse_vocab = metadata["reverse_vocab"]
 
 model = WordGramModel(vocab_size)
-model.load_state_dict(torch.load('models/bpe-model.pt', map_location="cuda"))
+model.load_state_dict(torch.load('FreestyleAI/models/bpe-model.pt', map_location="cuda"))
 model.to(device = "cuda")
 model.eval()
 

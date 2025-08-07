@@ -1,9 +1,9 @@
 import torch
 import torch.nn.functional as F
-from architecture import WordGramModel
+from FreestyleAI import WordGramModel
 from matplotlib import pyplot as plt
 from tqdm import tqdm
-from tokenizer import tokenize, decode
+from .tokenizer import tokenize
 import time
 
 
@@ -13,7 +13,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.empty_cache()
 
 # Get BPE tokenized data
+print("Starting tokenization...")
 vocab, reverse_vocab, merges, ids = tokenize()
+print("Tokenization finished!")
+
 vocab_size = len(vocab)
 max_index = max(vocab.values())
 # Model config
