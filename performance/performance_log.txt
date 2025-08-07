@@ -31,3 +31,12 @@ Train loss: 1.8134, Val loss: 1.8969
 
 BPE-Model
 Train loss: 1.7931, Val loss: 1.8489
+
+BPE-Model
+Train loss: 1.3248, Val loss: 1.3270
+
+BPE-Model
+Train loss: 1.4847, Val loss: 1.5003
+
+BPE-Model
+Train loss: 2.9931, Val loss: 3.0905

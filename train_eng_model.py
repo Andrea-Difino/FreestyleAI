@@ -14,7 +14,7 @@ db = pd.read_csv('updated_rappers.csv', usecols=["song", "lyric"])
 db["lyric"] = db["lyric"].apply(lambda x: x.lower())
 songs_names = list(dict.fromkeys(db['song']))
 
-song_lyrics_dict = {title: "" for title in songs_names}
+song_lyrics_dict = {title: "<START> " for title in songs_names}
 
 batch_size = 64 #sequences to be processed in parallel
 block_size = 32 #number of words to be processed in parallel = (context_size)
@@ -44,7 +44,7 @@ def refine_data():
     for _, row in db.iterrows():
         title = row['song']
         lyrics = row['lyric']
-        cleaned_lyrics = "<START> "
+        cleaned_lyrics = ""
         lyrics = clean_text(lyrics)
         for word in lyrics.split():
             if is_informative(word):

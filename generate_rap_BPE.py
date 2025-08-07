@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from architecture import WordGramModel
-from tokenizer import decode, build_vocab
+from tokenizer import decode
 
 metadata = torch.load('metadata/bpe-metadata.pt')
 merges = metadata["merges"]
@@ -9,20 +9,23 @@ max_index = metadata["max_index"]
 context_size = metadata["context_size"]
 embedding_dim = metadata["embedding_dim"]
 vocab_size = metadata["vocab-size"]
-
-vocab = build_vocab(merges, max_index)
+reverse_vocab = metadata["reverse_vocab"]
 
 model = WordGramModel(vocab_size)
 model.load_state_dict(torch.load('models/bpe-model.pt', map_location="cuda"))
 model.to(device = "cuda")
 model.eval()
 
+
+trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Totale parametri: {trainable_params:,}")
+
 def compute_entropy(probs):
     log_probs = torch.log(probs + 1e-8)
     entropy = -(probs * log_probs).sum(dim=1)
     return entropy.mean().item()
 
-def generate_sequence_bpe(model, vocab, max_tokens=100, temperature=1.0, device='cuda'):
+def generate_sequence_bpe(model, reverse_vocab, max_tokens=50, temperature=1.0, device='cuda'):
     model.eval()
     context = [0]  # definisci questo come il token di inizio (se ne hai uno)
     generated_ids = []
@@ -50,13 +53,13 @@ def generate_sequence_bpe(model, vocab, max_tokens=100, temperature=1.0, device=
         context = context[1:] + [next_id] if len(context) >= context_size else context + [next_id]
 
         # opzionale: fermati a un token di fine
-        if decode([next_id], vocab) == "\n":  # definisci un token speciale se necessario
+        if reverse_vocab.get(next_id) == "<LINE>":
             break
 
     return generated_ids
 
 if __name__ == "__main__":
     for _ in range(10):
-        output_ids = generate_sequence_bpe(model, vocab)
-        print("Tokens:", output_ids)
-        print("Testo:", decode(output_ids, vocab))
+        output_ids = generate_sequence_bpe(model, reverse_vocab)
+        text = decode(output_ids, reverse_vocab)
+        print("Testo:", text)

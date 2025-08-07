@@ -3,16 +3,16 @@ import torch.nn.functional as F
 from architecture import WordGramModel
 from matplotlib import pyplot as plt
 from tqdm import tqdm
-from tokenizer import tokenize
+from tokenizer import tokenize, decode
 
 # Device config
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.empty_cache()
 
 # Get BPE tokenized data
-merges, max_index, all_indices, ids, vocab = tokenize()
-vocab_size = vocab
- 
+vocab, reverse_vocab, merges, ids = tokenize()
+vocab_size = len(vocab)
+max_index = max(vocab.values())
 # Model config
 batch_size = 256
 block_size = 32
@@ -69,8 +69,8 @@ def train():
     counter = 0
     patience = 10
     epoch_losses = []
-    steps_per_epoch = 2000
-    epochs = 65
+    steps_per_epoch = 2250
+    epochs = 125
 
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs}")
@@ -121,7 +121,8 @@ def train():
         "max_index": max_index,
         "context_size": block_size,
         "embedding_dim": n_embd,
-        "vocab-size": vocab_size
+        "vocab-size": vocab_size, 
+        "reverse_vocab": reverse_vocab
     }, 'metadata/bpe-metadata.pt')
 
     with open('performance/performance_log.txt', 'a') as f:
