@@ -138,7 +138,7 @@ def tokenize():
     merges = {}  # {(pair): new_token_id}
     lengths = []
     for i in range(num_merges):
-        print("merging status: " + str(i+1) + f'/{num_merges}')
+        print("merging status: " + str(i+1) + f'/{num_merges-1}')
         stats = get_stats(ids_int, reverse_vocab)
         if not stats:
             break
