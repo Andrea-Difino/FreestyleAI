@@ -4,7 +4,10 @@ from architecture import WordGramModel
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 from tokenizer import tokenize, decode
+import time
 
+
+start_time = time.time()
 # Device config
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.empty_cache()
@@ -109,7 +112,6 @@ def train():
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.savefig("performance/BPE_loss_plot.png")
-    plt.show()
     plt.close()
 
     # Save model
@@ -124,9 +126,15 @@ def train():
         "vocab-size": vocab_size, 
         "reverse_vocab": reverse_vocab
     }, 'metadata/bpe-metadata.pt')
+    
+    end_time = time.time()
+    duration = end_time - start_time
+    print(f"Tempo di esecuzione: {duration/120} ore")
 
     with open('performance/performance_log.txt', 'a') as f:
-        f.write(f"\nBPE-Model\nTrain loss: {losses['train']:.4f}, Val loss: {losses['val']:.4f}\n")
+        f.write(f"\nBPE-Model\nTrain loss: {losses['train']:.4f}, Val loss: {losses['val']:.4f}, Tempo di esecuzione in ore: {duration/120}\n")
+
+    
 
 
 if __name__ == "__main__":
