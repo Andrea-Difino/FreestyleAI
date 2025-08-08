@@ -2,7 +2,6 @@ import pandas as pd
 import regex as re
 from collections import Counter, defaultdict
 import matplotlib.pyplot as plt
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
 SPECIAL_TOKENS = ["<START>", "<END>", "<UNK>", "<LINE>"]
@@ -103,11 +102,7 @@ def merge(ids, pair, new_token):
     return newids
 
 def tokenize():
-    db = pd.read_csv(
-        "FreestyleAI/updated_rappers.csv",
-        usecols=["song", "lyric"],
-        engine="pyarrow",
-    )
+    db = pd.read_csv('FreestyleAI/updated_rappers.csv', usecols=["song", "lyric"])
 
     tokens = refine_data(db)  # regex tokenize + clean + add special tokens
     ids = tokens_to_bytes(tokens)  # converti in bytes + sep (special tokens rimangono)
