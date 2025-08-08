@@ -1,262 +1,183 @@
 import pandas as pd
 import regex as re
-from collections import Counter, defaultdict
-import matplotlib.pyplot as plt
+import sentencepiece as spm
+from pathlib import Path
+from tqdm import tqdm
+import pickle
 
 GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
 SPECIAL_TOKENS = ["<START>", "<END>", "<UNK>", "<LINE>"]
 
-def is_informative(word):
-    word_stripped = word.strip()
-    if not word_stripped:
+CSV_PATH          = "FreestyleAI/updated_rappers.csv"     # <-- tuo file
+CORPUS_PATH       = "tmp_corpus.txt"                      # file intermedio
+SPM_MODEL_PREFIX  = "FreestyleAI/models/bpe_spm"          # model + vocab saranno salvati qui
+VOCAB_SIZE        = 24000                                 # numero di token BPE (puoi cambiarlo)
+CHAR_COVERAGE     = 1.0                                   # copertura caratteri Unicode (1.0 = tutti)
+
+
+_SPLIT_RE = re.compile(GPT4_SPLIT_PATTERN)   # compilata una sola volta
+
+# ----------------------------------------------------------------------
+#   FUNZIONI DI SUPPORTO
+# ----------------------------------------------------------------------
+def clean_text(text: str) -> str:
+    """Rimuove spazi multipli e strip finale."""
+    return re.sub(r'\s{2,}', ' ', text).strip()
+
+
+def is_informative(word: str) -> bool:
+    """Logica identica al tuo script originale."""
+    w = word.strip()
+    if not w:
         return False
-    if word_stripped.lower() in {"<unk>", "<line>", "<start>", "<end>"}:
+    if w.lower() in {"<unk>", "<line>", "<start>", "<end>"}:
         return False
-    if word_stripped.isdigit():
+    if w.isdigit():
         return True
-    if re.match(r"^[a-zA-Z']+$", word_stripped):
+    if re.fullmatch(r"[a-zA-Z']+", w):
         return True
-    if word == " ":
-        return True
-    return False
+    return w == " "
 
-def clean_text(text):
-    # Replaces multiple spaces with a single space
-    text = re.sub(r'\s{2,}', ' ', text)
-    return text.strip()
 
-def refine_data(db):
-    all_tokens = []
+def split_line(line: str):
+    """Yield di token usando la regex pre‑compilata."""
+    return (m.group(0) for m in _SPLIT_RE.finditer(line))
 
-    # Raggruppa per canzone
+
+def process_one_song(lyrics: list[str]) -> list[str]:
+    """Applica la regex + aggiunge i token speciali."""
+    tokens = ["<START>"]
+    for line in lyrics:
+        line = clean_text(line.lower())
+        if not line:
+            continue
+        for w in split_line(line):
+            tokens.append(w if is_informative(w) else "<UNK>")
+        tokens.append("<LINE>")
+    # L’ultimo <LINE> diventa <END>
+    if tokens[-1] == "<LINE>":
+        tokens[-1] = "<END>"
+    else:
+        tokens.append("<END>")
+    return tokens
+
+
+# ----------------------------------------------------------------------
+#   Scrivi il corpus di testo per SentencePiece
+# ----------------------------------------------------------------------
+def write_corpus(csv_path: str, corpus_path: str) -> None:
+    """
+    Legge il CSV, tokenizza ogni canzone e scrive una riga
+    (token separati da spazio) in `corpus_path`.
+    """
+    print("🔎  Lettura CSV …")
+    db = pd.read_csv(
+        csv_path,
+        usecols=["song", "lyric"],
+        engine="pyarrow",            # più veloce del default
+    )
+
+    # Raggruppa per canzone (come nel tuo script)
     grouped = db.groupby("song")["lyric"].apply(list)
 
-    for _, lyrics_lines in grouped.items():
-        song_tokens = ["<START>"]
-
-        for line in lyrics_lines:
-            line = clean_text(line.lower()).strip()
-            if not line:
-                continue
-            
-            for word in re.findall(GPT4_SPLIT_PATTERN, line):
-                
-                if is_informative(word):
-                    song_tokens.append(word)
-                else:
-                    song_tokens.append("<UNK>")
-
-            song_tokens.append("<LINE>")  # fine riga
-
-        # Rimuovi ultimo <LINE> e aggiungi <END>
-        if song_tokens[-1] == "<LINE>":
-            song_tokens[-1] = "<END>"
-        else:
-            song_tokens.append("<END>")
-
-        all_tokens.append(song_tokens)
-
-    # Flatten
-    flat_tokens = []
-    for song_tokens in all_tokens:
-        flat_tokens.extend(song_tokens)
-
-    return flat_tokens
+    corpus_file = Path(corpus_path)
+    with corpus_file.open("w", encoding="utf-8") as fout:
+        for lyrics in tqdm(grouped, desc="Tokenizzazione canzoni"):
+            song_tokens = process_one_song(lyrics)
+            fout.write(" ".join(song_tokens) + "\n")
+    print(f"✅ Corpus scritto in: {corpus_path}")
 
 
-def tokens_to_bytes(tokens):
+# ----------------------------------------------------------------------
+#   Addestra SentencePiece (BPE)
+# ----------------------------------------------------------------------
+def train_spm(corpus_path: str,
+              model_prefix: str,
+              vocab_size: int,
+              character_coverage: float = 1.0) -> str:
     """
-    Convert tokens list into list of byte IDs + SEP as separator.
-    Special tokens (<START>, <END>, <UNK>) stay as strings, others become bytes + SEP.
+    Esegue SentencePieceTrainer su `corpus_path`.
+    Salva:
+        - {model_prefix}.model
+        - {model_prefix}.vocab
+    Restituisce il percorso completo del file .model.
     """
-    out = []
-    for t in tokens:
-        if t in SPECIAL_TOKENS:
-            out.append(t)  # keep special tokens as is
-        else:
-            b = t.encode("utf-8")
-            out.extend(b)
-    return out
+    spm_cmd = (
+        f"--input={corpus_path} "
+        f"--model_prefix={model_prefix} "
+        f"--vocab_size={vocab_size} "
+        f"--character_coverage={character_coverage} "
+        "--model_type=bpe "
+        "--pad_id=-1 "            # nessun token di padding (non serve per il tuo model)
+        "--unk_id=0 "             # <UNK> sarà il token 0
+        "--bos_id=1 "             # <START>
+        "--eos_id=2 "             # <END>
+        "--user_defined_symbols=<LINE> "   # aggiungiamo <LINE> come simbolo extra
+        "--max_sentence_length=6000 "
+    )
+    print("🚀  Addestramento SentencePiece …")
+    spm.SentencePieceTrainer.Train(spm_cmd)
+    model_path = f"{model_prefix}.model"
+    print(f"✅  Modello SentencePiece salvato in: {model_path}")
+    return model_path
 
-def get_stats(ids, reverse_vocab):
-    pairs = defaultdict(int)
-    for i in range(len(ids) - 1):
-        left = reverse_vocab[ids[i]]
-        right = reverse_vocab[ids[i+1]]
-        if isinstance(left, str) or isinstance(right, str):
-            continue 
-        pair = (ids[i], ids[i+1])
-        pairs[pair] += 1
-    return Counter(pairs)
 
-def merge(ids, pair, new_token):
-    newids = []
-    i = 0
-    while i < len(ids):
-        if i < len(ids) - 1 and ids[i] == pair[0] and ids[i+1] == pair[1]:
-            newids.append(new_token)
-            i += 2
-        else:
-            newids.append(ids[i])
-            i += 1
-    return newids
+# ----------------------------------------------------------------------
+#   Codifica l’intero dataset in una lista di ID
+# ----------------------------------------------------------------------
+def encode_dataset(csv_path: str, sp_model_path: str) -> list[int]:
+    """
+    Legge di nuovo il CSV, tokenizza con la regex e restituisce
+    una lista piatta di interi (ID del vocabolo SentencePiece).
+    Questo file può essere salvato una volta sola (`ids_spm.pkl`) e
+    poi caricato direttamente dal training.
+    """
+    sp = spm.SentencePieceProcessor()
+    sp.Load(sp_model_path)
 
-def tokenize():
-    db = pd.read_csv('FreestyleAI/updated_rappers.csv', usecols=["song", "lyric"])
+    db = pd.read_csv(
+        csv_path,
+        usecols=["song", "lyric"],
+        engine="pyarrow",
+    )
 
-    tokens = refine_data(db)  # regex tokenize + clean + add special tokens
-    ids = tokens_to_bytes(tokens)  # converti in bytes + sep (special tokens rimangono)
-    # Costruisci vocabolario iniziale: special tokens + byte 0-255 + SEP
-    vocab = {}
-    reverse_vocab = {}
-    current_index = 0
+    grouped = db.groupby("song")["lyric"].apply(list)
 
-    # Special tokens
-    for st in SPECIAL_TOKENS:
-        vocab[st] = current_index
-        reverse_vocab[current_index] = st
-        current_index += 1
+    all_ids = []
+    for lyrics in tqdm(grouped, desc="Encoding dataset"):
+        tokens = process_one_song(lyrics)          # <START> … <END> + <LINE>
+        raw = " ".join(tokens)                     # SentencePiece legge token separati da spazio
+        ids = sp.EncodeAsIds(raw)                  # restituisce BOS/EOS automaticamente
+        all_ids.extend(ids)
+    return all_ids
 
-    # byte tokens 0-255
-    for i in range(256):
-        b = i
-        vocab[b] = current_index
-        reverse_vocab[current_index] = b
-        current_index += 1
-
-    # Trasforma ids (token speciali stringa + int byte) in lista di ID interi
-    ids_int = []
-    for x in ids:
-        if isinstance(x, str):
-            ids_int.append(vocab[x])  # special token
-        else:
-            ids_int.append(vocab[x])  # byte (int)
-
-    vocab_size = current_index + 901
-    num_merges = vocab_size - current_index - 1
-
-    merges = {}  # {(pair): new_token_id}
-
-    for i in range(num_merges):
-        print("merging status: " + str(i+1) + f'/{num_merges-1}')
-        stats = get_stats(ids_int, reverse_vocab)
-        if not stats:
-            break
-        most_common = stats.most_common(1)[0][0]
-
-        # Crea nuovo token concatenando i due token in bytes (o string se special token)
-        left = reverse_vocab[most_common[0]]
-        right = reverse_vocab[most_common[1]]
-        print(f"Merge {i+1}: {most_common} → token {current_index}")
-        
-
-        if isinstance(left, int):
-            if left <= 255:
-                left_bytes = bytes([left])  # singolo byte
-            else:
-                left_bytes = reverse_vocab[left]  # prendi i bytes concatenati dal vocabolario inverso
-        else:
-            left_bytes = left
-
-        if isinstance(right, int):
-            if right <= 255:
-                right_bytes = bytes([right])
-            else:
-                right_bytes = reverse_vocab[right]
-        else:
-            right_bytes = right
-
-        new_token_bytes = left_bytes + right_bytes
-        if new_token_bytes in vocab:
-            continue  
-        print(f"→ left_bytes: {left_bytes}, right_bytes: {right_bytes}, merged: {new_token_bytes}")
-        vocab[new_token_bytes] = current_index
-        reverse_vocab[current_index] = new_token_bytes
-        merges[most_common] = current_index
-        current_index += 1
-
-        prev_length = len(ids_int)
-        ids_int = merge(ids_int, most_common, vocab[new_token_bytes])
-        new_length = len(ids_int)
-
-        delta = prev_length - new_length
-        print(f"Dopo merge: length={new_length}, delta={delta}")
-
-        if delta < 10:
-            print("Merge marginali, interruzione anticipata.")
-            break
-
-    print(f"Compressione: {len(ids)} → {len(ids_int)} , {(len(ids)/len(ids_int)):.2f}x")    
-    
-    return vocab, reverse_vocab, merges, ids_int
-
-def encode(text, merges, vocab):
-    tokens = re.findall(GPT4_SPLIT_PATTERN, text.lower())
-    # sostituisci token non informativi con <UNK>
-    tokens = [t if is_informative(t) else "<UNK>" for t in tokens]
-    # aggiungi start/end
-    tokens = ["<START>"] + tokens + ["<END>"]
-
-    # converti in byte + sep
-    ids = tokens_to_bytes(tokens)
-
-    # converto in id interi
-    ids_int = []
-    for x in ids:
-        if isinstance(x, str):
-            ids_int.append(vocab[x])
-        else:
-            ids_int.append(vocab[x])
-
-    # applica merges BPE
-    already_merged = set()
-
-    while True:
-        stats = get_stats(ids_int, reverse_vocab)
-        pair = None
-        for p in stats:
-            if p in merges and p not in already_merged:
-                pair = p
-                already_merged.add(p)
-                break
-        if not pair:
-            break
-        ids_int = merge(ids_int, pair, merges[pair])
-
-    return ids_int
-
-def decode(ids_int, reverse_vocab):
-    bytes_list = []
-    for idx in ids_int:
-        token = reverse_vocab[idx]
-        if isinstance(token, str):
-            # Gestione dei token speciali
-            if token == "<LINE>":
-                bytes_list.append(b"\n")
-            elif token in ("<START>", "<END>", "<UNK>"):
-                continue 
-        else:
-            # token bytes (singolo o concatenato)
-            if isinstance(token, int):
-                bytes_list.append(bytes([token]))
-            else:
-                bytes_list.append(token)
-
-    decoded = b''.join(bytes_list)
-    
-    # Pulizia finale: rimuove token speciali se non già gestiti
-    decoded = decoded.strip()
- 
-    try:
-        return decoded.decode("utf-8")
-    except UnicodeDecodeError:
-        return decoded.decode("utf-8", errors="replace")
 
 if __name__ == "__main__":
-    vocab, reverse_vocab, merges, ids = tokenize()
+    csv_path   = CSV_PATH
+    corpus_path = CORPUS_PATH
+    model_prefix = SPM_MODEL_PREFIX
+    vocab_sz   = VOCAB_SIZE
 
-    test_text = "I'm feeling good, yeah!"
-    encoded = encode(test_text, merges, vocab)
-    print("Encoded:", encoded)
-    decoded = decode(encoded, reverse_vocab)
-    print("Decoded:", decoded)
+    # ---- Crea il corpus testuale ----
+    write_corpus(csv_path, corpus_path)
+
+    # ---- Addestra SentencePiece ----
+    spm_model = train_spm(
+        corpus_path=corpus_path,
+        model_prefix=model_prefix,
+        vocab_size=vocab_sz,
+        character_coverage=CHAR_COVERAGE,
+    )
+
+    # ---- Codifica tutto il dataset in ID ----
+    ids = encode_dataset(csv_path, spm_model)
+
+    # Salviamo gli ID in formato pickle (puoi usare anche np.save se preferisci)
+    ids_path = Path("FreestyleAI/data/ids_spm.pkl")
+    ids_path.parent.mkdir(parents=True, exist_ok=True)
+    with ids_path.open("wb") as f:
+        pickle.dump(ids, f)
+    print(f"✅  Lista di ID salvata in: {ids_path}")
+
+    Path(corpus_path).unlink(missing_ok=True)
+    print("🗑️  Corpus temporaneo cancellato.")

@@ -40,3 +40,5 @@ Train loss: 1.4847, Val loss: 1.5003
 
 BPE-Model
 Train loss: 2.9931, Val loss: 3.0905
+
+BPE-Model - Train loss: 2.9729, Val loss: 3.1330, Tempo (h): 4.28

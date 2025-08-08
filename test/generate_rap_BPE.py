@@ -1,65 +1,155 @@
 import torch
 import torch.nn.functional as F
+from tqdm import tqdm
+import sentencepiece as spm
 from FreestyleAI import WordGramModel
-from ..tokenizer_BPE.tokenizer import decode
 
-metadata = torch.load('FreestyleAI/metadata/bpe-metadata.pt')
-merges = metadata["merges"]
-max_index = metadata["max_index"]
-context_size = metadata["context_size"]
-embedding_dim = metadata["embedding_dim"]
-vocab_size = metadata["vocab-size"]
-reverse_vocab = metadata["reverse_vocab"]
 
-model = WordGramModel(vocab_size)
-model.load_state_dict(torch.load('FreestyleAI/models/bpe-model.pt', map_location="cuda"))
-model.to(device = "cuda")
+DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm.model"   # <-- il tokenizer che hai già addestrato
+MODEL_STATE_PATH = "FreestyleAI/models/bpe-model.pt"    # <-- il tuo WordGramModel
+MAX_TOKENS      = 80      # lunghezza massima della sequenza generata
+TEMPERATURE     = 1.0     # temperatura di base (più alta → più casuale)
+TOP_K           = 0       # 0 = disabled, altrimenti tiene i K token più probabili
+TOP_P           = 0.9     # nucleus sampling (0 = disabled)
+BLOCK_SIZE      = 32      # deve coincidere con quello usato in training (word‑gram context)
+
+sp = spm.SentencePieceProcessor()
+sp.Load(SPM_MODEL_PATH)
+
+VOCAB_SIZE   = sp.GetPieceSize()
+BOS_ID       = sp.bos_id()   # di solito 1 → <START>
+EOS_ID       = sp.eos_id()   # di solito 2 → <END>
+LINE_ID      = sp.PieceToId("<LINE>")  # se il tuo modello lo usa
+
+print(f"🔠  Vocabulary size: {VOCAB_SIZE}   BOS={BOS_ID}  EOS={EOS_ID}")
+
+model = WordGramModel(VOCAB_SIZE)
+model.load_state_dict(torch.load(MODEL_STATE_PATH, map_location="cuda"))
+model.to(DEVICE)
 model.eval()
 
+print(f"✅  Model loaded – parametri totali: {sum(p.numel() for p in model.parameters()):,}")
 
-trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Totale parametri: {trainable_params:,}")
 
-def compute_entropy(probs):
-    log_probs = torch.log(probs + 1e-8)
-    entropy = -(probs * log_probs).sum(dim=1)
-    return entropy.mean().item()
+def sample_from_probs(probs: torch.Tensor, temperature: float, top_k: int = 0, top_p: float = 0.0):
+    """
+    - `probs`  : (1, vocab)   già softmax
+    - `temperature` : scala le log‑probabilità.
+    - `top_k`  : tieni i k token più probabili (0 = disabled).
+    - `top_p`  : nucleus sampling (mantieni la massa cumulativa ≤ p).
+    """
+    # temperatura
+    if temperature != 1.0:
+        logits = torch.log(probs + 1e-9) / temperature
+        probs = torch.softmax(logits, dim=-1)
 
-def generate_sequence_bpe(model, reverse_vocab, max_tokens=50, temperature=1.0, device='cuda'):
+    # top‑k
+    if top_k > 0:
+        topk_vals, topk_idx = torch.topk(probs, top_k, dim=-1)
+        probs = torch.zeros_like(probs).scatter_(-1, topk_idx, topk_vals)
+        probs = probs / probs.sum(dim=-1, keepdim=True)   # normalizzi di nuovo
+
+    # nucleus (top‑p)
+    if top_p > 0.0:
+        sorted_probs, sorted_idx = torch.sort(probs, descending=True, dim=-1)
+        cumulative = torch.cumsum(sorted_probs, dim=-1)
+        # maschera tutti i token oltre la soglia p
+        mask = cumulative > top_p
+        # sposta la maschera di una posizione (mantieni il primo token che supera p)
+        mask[..., 1:] = mask[..., :-1].clone()
+        mask[..., 0] = False
+        sorted_probs = sorted_probs.masked_fill(mask, 0.0)
+        # riporta nella posizione originale
+        probs = torch.zeros_like(probs).scatter_(-1, sorted_idx, sorted_probs)
+        probs = probs / probs.sum(dim=-1, keepdim=True)
+
+    # campiona un token
+    next_id = torch.multinomial(probs, num_samples=1).item()
+    return next_id
+
+
+# ----------------------------------------------------------------------
+#   4️⃣  Funzione di generazione
+# ----------------------------------------------------------------------
+def generate_text(model, sp, max_tokens: int = MAX_TOKENS, temperature: float = TEMPERATURE, top_k: int = TOP_K, top_p: float = TOP_P, block_size: int = BLOCK_SIZE):
+    """
+    Genera una sequenza di token utilizzando il contesto di `block_size`.
+    Restituisce sia la lista di ID che la stringa decodificata.
+    """
     model.eval()
-    context = [0]  # definisci questo come il token di inizio (se ne hai uno)
-    generated_ids = []
-    total_entropy = 0
-    steps = 0
+    # contesto iniziale = BOS + padding di BOS (così il modello ha sempre block_size token)
+    context = [BOS_ID] * block_size
 
-    for _ in range(max_tokens):
-        x = torch.tensor([context], dtype=torch.long).to(device)
-        logits, _ = model(x)
-        logits = logits[:, -1, :] / temperature
-        probs = torch.nn.functional.softmax(logits, dim=-1)
+    generated_ids = []          # solo i token *generati* (esclude il padding iniziale)
+    entropies = []              # opzionale: per analisi
 
-        entropy = compute_entropy(probs)
-        total_entropy += entropy
-        steps += 1
+    for step in range(max_tokens):
+        # -------------------------------------------------
+        #   Forward: prendiamo solo l'ultimo token del blocco
+        # -------------------------------------------------
+        x = torch.tensor([context], dtype=torch.long, device=DEVICE)   # shape (1, block_size)
+        with torch.no_grad():
+            logits, _ = model(x) # logits shape (1, block_size, vocab)
 
-        # Adatta temperatura dinamica
+        # Consido l'ultimo token della sequenza (indice -1)
+        logits_last = logits[:, -1, :] / temperature
+        probs = torch.softmax(logits_last, dim=-1)   # (1, vocab)
+
+        # -------------------------------------------------
+        #   Entropia 
+        # -------------------------------------------------
+        entropy = -(probs * torch.log(probs + 1e-9)).sum(dim=-1).item()
+        entropies.append(entropy)
+
         if entropy < 2.2:
             temperature += 0.2
         elif entropy > 4.0:
             temperature = max(0.5, temperature - 0.1)
 
-        next_id = torch.multinomial(probs, num_samples=1).item()
+        # -------------------------------------------------
+        #   Sampling 
+        # -------------------------------------------------
+        next_id = sample_from_probs(probs, temperature, top_k, top_p)
         generated_ids.append(next_id)
-        context = context[1:] + [next_id] if len(context) >= context_size else context + [next_id]
 
-        # opzionale: fermati a un token di fine
-        if reverse_vocab.get(next_id) == "<LINE>":
+        # -------------------------------------------------
+        #   Aggiorna il contesto (shift‑left + nuovo token)
+        # -------------------------------------------------
+        context = context[1:] + [next_id]
+
+        # -------------------------------------------------
+        #   Stop‑condition (se trovi <LINE> o <END>)
+        # -------------------------------------------------
+        if next_id in {EOS_ID, LINE_ID}:
             break
 
-    return generated_ids
+    # Decodifica in stringa
+    text = sp.DecodeIds(generated_ids)
+    # Se vuoi trasformare il token <LINE> in un ritorno a capo:
+    text = text.replace("<LINE>", "\n")
+    # (Puoi anche rimuovere eventuali token di padding residui)
+    return generated_ids, text, entropies
 
+
+# ----------------------------------------------------------------------
+#   5️⃣  Esecuzione di prova
+# ----------------------------------------------------------------------
 if __name__ == "__main__":
-    for _ in range(10):
-        output_ids = generate_sequence_bpe(model, reverse_vocab)
-        text = decode(output_ids, reverse_vocab)
-        print("Testo:", text)
+    # Genera 10 esempi
+    for i in range(10):
+        ids, txt, ent = generate_text(
+            model,
+            sp,
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+            top_k=TOP_K,
+            top_p=TOP_P,
+            block_size=BLOCK_SIZE,
+        )
+        print(f"\n🪄  Sample {i+1}")
+        print(f"   → IDs   : {ids[:20]} … ({len(ids)} token)")
+        print(f"   → Text  : {txt}")
+        # media dell'entropia (indicatore di “creatività”)
+        if ent:
+            print(f"   → Entropy (avg): {sum(ent)/len(ent):.3f}")
