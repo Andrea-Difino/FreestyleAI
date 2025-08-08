@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 import sentencepiece as spm
-from FreestyleAI import WordGramModel
+from FreestyleAI import WordGramModel # type: ignore
 
 
 DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")

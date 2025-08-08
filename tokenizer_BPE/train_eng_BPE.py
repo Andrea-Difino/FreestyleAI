@@ -4,7 +4,7 @@ from tqdm import tqdm
 from torch.utils.data import TensorDataset, DataLoader
 from pathlib import Path
 import sentencepiece as spm
-from FreestyleAI import WordGramModel
+from FreestyleAI import WordGramModel # type: ignore
 
 # ----------------------------------------------------------------------
 #   FUNZIONI di supporto (queste rimangono al livello globale)
