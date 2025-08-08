@@ -16,7 +16,7 @@ class Head(nn.Module):
       self.query = nn.Linear(n_embd, head_size, bias=False)
       self.key = nn.Linear(n_embd, head_size, bias=False)
       self.value = nn.Linear(n_embd, head_size, bias=False)
-      self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+      self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size, dtype=torch.bool)))
 
       self.dropout = nn.Dropout(dropout)
 

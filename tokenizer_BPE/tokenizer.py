@@ -2,6 +2,7 @@ import pandas as pd
 import regex as re
 from collections import Counter, defaultdict
 import matplotlib.pyplot as plt
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
 SPECIAL_TOKENS = ["<START>", "<END>", "<UNK>", "<LINE>"]
@@ -102,7 +103,11 @@ def merge(ids, pair, new_token):
     return newids
 
 def tokenize():
-    db = pd.read_csv('FreestyleAI/updated_rappers.csv', usecols=["song", "lyric"])
+    db = pd.read_csv(
+        "FreestyleAI/updated_rappers.csv",
+        usecols=["song", "lyric"],
+        engine="pyarrow",
+    )
 
     tokens = refine_data(db)  # regex tokenize + clean + add special tokens
     ids = tokens_to_bytes(tokens)  # converti in bytes + sep (special tokens rimangono)
@@ -132,11 +137,11 @@ def tokenize():
         else:
             ids_int.append(vocab[x])  # byte (int)
 
-    vocab_size = current_index + 850
+    vocab_size = current_index + 901
     num_merges = vocab_size - current_index - 1
 
     merges = {}  # {(pair): new_token_id}
-    lengths = []
+
     for i in range(num_merges):
         print("merging status: " + str(i+1) + f'/{num_merges-1}')
         stats = get_stats(ids_int, reverse_vocab)
@@ -147,7 +152,7 @@ def tokenize():
         # Crea nuovo token concatenando i due token in bytes (o string se special token)
         left = reverse_vocab[most_common[0]]
         right = reverse_vocab[most_common[1]]
-        print(f"Merge {i}: {most_common} → token {current_index}")
+        print(f"Merge {i+1}: {most_common} → token {current_index}")
         
 
         if isinstance(left, int):
@@ -179,7 +184,6 @@ def tokenize():
         ids_int = merge(ids_int, most_common, vocab[new_token_bytes])
         new_length = len(ids_int)
 
-        lengths.append(len(ids_int))
         delta = prev_length - new_length
         print(f"Dopo merge: length={new_length}, delta={delta}")
 
@@ -188,16 +192,6 @@ def tokenize():
             break
 
     print(f"Compressione: {len(ids)} → {len(ids_int)} , {(len(ids)/len(ids_int)):.2f}x")    
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(lengths, label="Lunghezza ids_int")
-    plt.xlabel("Merge step")
-    plt.ylabel("Valore") 
-    plt.title("Andamento lunghezza token")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
     
     return vocab, reverse_vocab, merges, ids_int
 
