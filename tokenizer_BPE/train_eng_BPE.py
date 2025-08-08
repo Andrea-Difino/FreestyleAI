@@ -173,7 +173,7 @@ def main():
     print(f"\n⏱️  Tempo di esecuzione: {hrs:.2f} ore")
     with open("FreestyleAI/performance/performance_log.txt", "a") as f:
         f.write(
-            f"\nBPE-Model - Train loss: {final_losses['train']:.4f}, "
+            f"\nBPE_SPM-Model - Train loss: {final_losses['train']:.4f}, "
             f"Val loss: {final_losses['val']:.4f}, Tempo (h): {hrs:.2f}\n"
         )
 

@@ -6,13 +6,13 @@ from FreestyleAI import WordGramModel
 
 
 DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm.model"   # <-- il tokenizer che hai già addestrato
-MODEL_STATE_PATH = "FreestyleAI/models/bpe-model.pt"    # <-- il tuo WordGramModel
+SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm.model"   
+MODEL_STATE_PATH = "FreestyleAI/models/bpe-model.pt"    
 MAX_TOKENS      = 80      # lunghezza massima della sequenza generata
 TEMPERATURE     = 1.0     # temperatura di base (più alta → più casuale)
 TOP_K           = 0       # 0 = disabled, altrimenti tiene i K token più probabili
 TOP_P           = 0.9     # nucleus sampling (0 = disabled)
-BLOCK_SIZE      = 32      # deve coincidere con quello usato in training (word‑gram context)
+BLOCK_SIZE      = 32      
 
 sp = spm.SentencePieceProcessor()
 sp.Load(SPM_MODEL_PATH)
