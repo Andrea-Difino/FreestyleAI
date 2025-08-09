@@ -11,7 +11,7 @@ SPECIAL_TOKENS = ["<START>", "<END>", "<UNK>", "<LINE>"]
 CSV_PATH          = "FreestyleAI/updated_rappers.csv"     
 CORPUS_PATH       = "tmp_corpus.txt"                      # file intermedio
 SPM_MODEL_PREFIX  = "FreestyleAI/models/bpe_spm"          # model + vocab saranno salvati qui
-VOCAB_SIZE        = 24000                                 # numero di token BPE (puoi cambiarlo)
+VOCAB_SIZE        = 26000                                 # numero di token BPE (puoi cambiarlo)
 CHAR_COVERAGE     = 1.0                                   # copertura caratteri Unicode (1.0 = tutti)
 
 
@@ -47,13 +47,16 @@ def split_line(line: str):
 def process_one_song(lyrics: list[str]) -> list[str]:
     """Applica la regex + aggiunge i token speciali."""
     tokens = ["<START>"]
-    for line in lyrics:
+    for i, line in enumerate(lyrics):
         line = clean_text(line.lower())
         if not line:
             continue
         for w in split_line(line):
             tokens.append(w if is_informative(w) else "<UNK>")
-        tokens.append("<LINE>")
+
+        if i < len(lyrics) - 1:
+            if sum(1 for t in split_line(line) if is_informative(t)) >= 3 or random.random() < 0.3:
+                tokens.append("<LINE>")
     # L’ultimo <LINE> diventa <END>
     if tokens[-1] == "<LINE>":
         tokens[-1] = "<END>"

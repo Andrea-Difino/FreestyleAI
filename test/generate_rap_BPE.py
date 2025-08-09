@@ -83,6 +83,7 @@ def generate_text(model, sp, max_tokens: int = MAX_TOKENS, temperature: float = 
 
     generated_ids = []          # solo i token *generati* (esclude il padding iniziale)
     entropies = []              # opzionale: per analisi
+    MIN_TOKENS_BEFORE_STOP = 10
 
     for step in range(max_tokens):
         # -------------------------------------------------
@@ -121,7 +122,7 @@ def generate_text(model, sp, max_tokens: int = MAX_TOKENS, temperature: float = 
         # -------------------------------------------------
         #   Stop‑condition (se trovi <LINE> o <END>)
         # -------------------------------------------------
-        if next_id in {EOS_ID, LINE_ID}:
+        if len(generated_ids) >= MIN_TOKENS_BEFORE_STOP and next_id in {EOS_ID, LINE_ID}:
             break
 
     # Decodifica in stringa
