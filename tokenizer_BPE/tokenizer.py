@@ -56,7 +56,7 @@ def process_one_song(lyrics: list[str]) -> list[str]:
             tokens.append(w if is_informative(w) else "<UNK>")
 
         if i < len(lyrics) - 1:
-            if sum(1 for t in split_line(line) if is_informative(t)) >= 3 or random.random() < 0.3:
+            if sum(1 for t in split_line(line) if is_informative(t)) >= 6 or random.random() < 0.3:
                 tokens.append("<LINE>")
     # L’ultimo <LINE> diventa <END>
     if tokens[-1] == "<LINE>":
