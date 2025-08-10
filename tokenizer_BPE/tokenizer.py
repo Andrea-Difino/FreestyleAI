@@ -10,24 +10,22 @@ GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1
 SPECIAL_TOKENS = ["<START>", "<END>", "<UNK>", "<LINE>"]
 
 CSV_PATH          = "FreestyleAI/updated_rappers.csv"     
-CORPUS_PATH       = "tmp_corpus.txt"                      # file intermedio
-SPM_MODEL_PREFIX  = "FreestyleAI/models/bpe_spm"          # model + vocab saranno salvati qui
-VOCAB_SIZE        = 26000                                 # numero di token BPE (puoi cambiarlo)
-CHAR_COVERAGE     = 1.0                                   # copertura caratteri Unicode (1.0 = tutti)
+CORPUS_PATH       = "tmp_corpus.txt"                      
+SPM_MODEL_PREFIX  = "FreestyleAI/models/bpe_spm"          
+VOCAB_SIZE        = 26000                                 # BPE token number
+CHAR_COVERAGE     = 1.0                                   
 
 
-_SPLIT_RE = re.compile(GPT4_SPLIT_PATTERN)   # compilata una sola volta
+_SPLIT_RE = re.compile(GPT4_SPLIT_PATTERN)   # compile one time
 
 # ----------------------------------------------------------------------
-#   FUNZIONI DI SUPPORTO
+#   SUPPORT FUNCTIONS
 # ----------------------------------------------------------------------
 def clean_text(text: str) -> str:
-    """Rimuove spazi multipli e strip finale."""
     return re.sub(r'\s{2,}', ' ', text).strip()
 
 
 def is_informative(word: str) -> bool:
-    """Logica identica al tuo script originale."""
     w = word.strip()
     if not w:
         return False
@@ -41,12 +39,11 @@ def is_informative(word: str) -> bool:
 
 
 def split_line(line: str):
-    """Yield di token usando la regex pre‑compilata."""
     return (m.group(0) for m in _SPLIT_RE.finditer(line))
 
 
 def process_one_song(lyrics: list[str]) -> list[str]:
-    """Applica la regex + aggiunge i token speciali."""
+    """Apply regex + add special token."""
     tokens = ["<START>"]
     for i, line in enumerate(lyrics):
         line = clean_text(line.lower())
@@ -58,7 +55,7 @@ def process_one_song(lyrics: list[str]) -> list[str]:
         if i < len(lyrics) - 1:
             if sum(1 for t in split_line(line) if is_informative(t)) >= 6 or random.random() < 0.3:
                 tokens.append("<LINE>")
-    # L’ultimo <LINE> diventa <END>
+    # last <LINE> become <END>
     if tokens[-1] == "<LINE>":
         tokens[-1] = "<END>"
     else:
@@ -67,21 +64,21 @@ def process_one_song(lyrics: list[str]) -> list[str]:
 
 
 # ----------------------------------------------------------------------
-#   Scrivi il corpus di testo per SentencePiece
+#   Write corpus text for sentencepiece
 # ----------------------------------------------------------------------
 def write_corpus(csv_path: str, corpus_path: str) -> None:
     """
-    Legge il CSV, tokenizza ogni canzone e scrive una riga
+    Read the CSV, tokenize every songs a write a line
     (token separati da spazio) in `corpus_path`.
     """
     print("🔎  Lettura CSV …")
     db = pd.read_csv(
         csv_path,
         usecols=["song", "lyric"],
-        engine="pyarrow",            # più veloce del default
+        engine="pyarrow",            
     )
 
-    # Raggruppa per canzone (come nel tuo script)
+    # groub by song
     grouped = db.groupby("song")["lyric"].apply(list)
 
     corpus_file = Path(corpus_path)
@@ -93,18 +90,18 @@ def write_corpus(csv_path: str, corpus_path: str) -> None:
 
 
 # ----------------------------------------------------------------------
-#   Addestra SentencePiece (BPE)
+#   train SentencePiece (BPE)
 # ----------------------------------------------------------------------
 def train_spm(corpus_path: str,
               model_prefix: str,
               vocab_size: int,
               character_coverage: float = 1.0) -> str:
     """
-    Esegue SentencePieceTrainer su `corpus_path`.
-    Salva:
+    Run SentencePieceTrainer on `corpus_path`.
+    Save:
         - {model_prefix}.model
         - {model_prefix}.vocab
-    Restituisce il percorso completo del file .model.
+    Return the path of .model.
     """
     spm_cmd = (
         f"--input={corpus_path} "
@@ -112,11 +109,11 @@ def train_spm(corpus_path: str,
         f"--vocab_size={vocab_size} "
         f"--character_coverage={character_coverage} "
         "--model_type=bpe "
-        "--pad_id=-1 "            # nessun token di padding (non serve per il tuo model)
-        "--unk_id=0 "             # <UNK> sarà il token 0
-        "--bos_id=1 "             # <START>
-        "--eos_id=2 "             # <END>
-        "--user_defined_symbols=<LINE> "   # aggiungiamo <LINE> come simbolo extra
+        "--pad_id=-1 "            
+        "--unk_id=0 "             
+        "--bos_id=1 "             
+        "--eos_id=2 "            
+        "--user_defined_symbols=<LINE> "   #extra simbol
         "--max_sentence_length=6000 "
     )
     print("🚀  Addestramento SentencePiece …")
@@ -127,14 +124,11 @@ def train_spm(corpus_path: str,
 
 
 # ----------------------------------------------------------------------
-#   Codifica l’intero dataset in una lista di ID
+#   Codify entire dataset into an ID list
 # ----------------------------------------------------------------------
 def encode_dataset(csv_path: str, sp_model_path: str) -> list[int]:
     """
-    Legge di nuovo il CSV, tokenizza con la regex e restituisce
-    una lista piatta di interi (ID del vocabolo SentencePiece).
-    Questo file può essere salvato una volta sola (`ids_spm.pkl`) e
-    poi caricato direttamente dal training.
+    Read again CSV, tokenize with the regex and return a flat list of integers (ID of SentencePiece vocab).
     """
     sp = spm.SentencePieceProcessor()
     sp.Load(sp_model_path)
@@ -149,9 +143,9 @@ def encode_dataset(csv_path: str, sp_model_path: str) -> list[int]:
 
     all_ids = []
     for lyrics in tqdm(grouped, desc="Encoding dataset"):
-        tokens = process_one_song(lyrics)          # <START> … <END> + <LINE>
-        raw = " ".join(tokens)                     # SentencePiece legge token separati da spazio
-        ids = sp.EncodeAsIds(raw)                  # restituisce BOS/EOS automaticamente
+        tokens = process_one_song(lyrics)          
+        raw = " ".join(tokens)                     
+        ids = sp.EncodeAsIds(raw)                  
         all_ids.extend(ids)
     return all_ids
 
@@ -162,10 +156,8 @@ if __name__ == "__main__":
     model_prefix = SPM_MODEL_PREFIX
     vocab_sz   = VOCAB_SIZE
 
-    # ---- Crea il corpus testuale ----
     write_corpus(csv_path, corpus_path)
 
-    # ---- Addestra SentencePiece ----
     spm_model = train_spm(
         corpus_path=corpus_path,
         model_prefix=model_prefix,
@@ -173,10 +165,9 @@ if __name__ == "__main__":
         character_coverage=CHAR_COVERAGE,
     )
 
-    # ---- Codifica tutto il dataset in ID ----
     ids = encode_dataset(csv_path, spm_model)
 
-    # Salviamo gli ID in formato pickle (puoi usare anche np.save se preferisci)
+    # save ids
     ids_path = Path("FreestyleAI/data/ids_spm.pkl")
     ids_path.parent.mkdir(parents=True, exist_ok=True)
     with ids_path.open("wb") as f:
