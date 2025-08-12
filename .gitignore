@@ -2,7 +2,9 @@
 .idea/*
 __pycache__/*
 models/*
+.vscode/*
 temporary_garbage/*
+dataset_creation/*.txt
 */__pycache__/*
 #model and datasets
 *.csv
