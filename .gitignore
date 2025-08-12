@@ -6,6 +6,7 @@ models/*
 temporary_garbage/*
 dataset_creation/*.txt
 */__pycache__/*
+data/*
 #model and datasets
 *.csv
 *.pt
