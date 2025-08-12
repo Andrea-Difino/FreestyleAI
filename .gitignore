@@ -4,8 +4,8 @@ __pycache__/*
 models/*
 temporary_garbage/*
 */__pycache__/*
-dataset_creation/youtube_cookies.txt
-dataset_creation/battleViste.txt
+dataset_creation/*.txt
+data/*
 #model and datasets
 *.csv
 *.pt
