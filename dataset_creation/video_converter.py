@@ -3,7 +3,7 @@ import whisper, torch
 import time, glob, os
 import yt_dlp
 
-start = 122
+start = 731
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("🚀  Device:", DEVICE)
 
@@ -57,7 +57,8 @@ youtube_urls = []
 with open("FreestyleAI/dataset_creation/youtubelinks.txt", "r") as f: 
     for line in f.readlines():
         youtube_urls.append(line[:-1])
-        
+
+total_length = len(youtube_urls)        
 youtube_urls = youtube_urls[start:]
 print(youtube_urls)
 
@@ -71,14 +72,19 @@ output_dataset = "FreestyleAI/dataset_creation/dataset_freestyle.txt"
 
 for i, url in enumerate(youtube_urls):
     start_time = time.time()
-    print(f"\n=== [{start+i+1}/{len(youtube_urls)}] PROCESSING ===")
+    print(f"\n=== [{start+i+1}/{total_length}] PROCESSING ===")
 
     audio_filename = f"FreestyleAI/temporary_garbage/audio_eng/battle_{start+i+1}.mp3"
 
     # download audio
     result = subprocess.run([
         "yt-dlp", "--cookies", "youtube_cookies.txt",
+        "-f", "bestaudio/best",
         "-x", "--audio-format", "mp3",
+        "--ignore-errors",
+        "--no-playlist",
+        "--retries", "5",
+        "--fragment-retries", "5",
         "-o", audio_filename,
         url
     ])
