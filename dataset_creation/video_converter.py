@@ -9,7 +9,7 @@ print("🚀  Device:", DEVICE)
 
 '''
 Code used to retrieve videos from the playlists of the KOTD youtube channel
-
+I left the playlist here to have a remainder of the already downloaded video for future upgrades
 playlist_urls = [
     "https://www.youtube.com/playlist?list=PLxcnTE5ZmNw70ahG9KhuxDMwpkGf6datY",
     "https://www.youtube.com/playlist?list=PLxcnTE5ZmNw4tVMDPGG9okG5zB_ciKO6N",
