@@ -73,9 +73,9 @@ def processa_dataset(path_file, path_csv):
     print(f"CSV creato in: {path_csv}")
 
 if __name__ == "__main__":
-    indexed_dataset = "FreestyleAI/dataset_creation/prova_dataset_indexed.txt"
+    indexed_dataset = "FreestyleAI/dataset_creation/dataset_freestyle_indexed.txt"
     aggiungi_indici(
-        "FreestyleAI/dataset_creation/prova_dataset.txt",
+        "FreestyleAI/dataset_creation/dataset_freestyle.txt",
         indexed_dataset
     )
-    processa_dataset(indexed_dataset, "FreestyleAI/dataset_creation/output_battles.csv")
+    #processa_dataset(indexed_dataset, "FreestyleAI/dataset_creation/output_battles.csv")

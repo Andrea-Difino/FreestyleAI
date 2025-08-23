@@ -3,7 +3,7 @@ import whisper, torch
 import time, glob, os
 import yt_dlp
 
-start = 731
+start = 12
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("🚀  Device:", DEVICE)
 
@@ -65,7 +65,7 @@ print(youtube_urls)
 # Loading medium model for faster transcription and a good level of transcription
 model = whisper.load_model("medium", device = DEVICE)  
 
-os.makedirs("FreestyleAI/temporary_garbage/audio_eng", exist_ok=True)
+os.makedirs("FreestyleAI/temporary_garbage/audio_eng_final", exist_ok=True)
 
 output_dataset = "FreestyleAI/dataset_creation/dataset_freestyle.txt"
 
@@ -74,13 +74,14 @@ for i, url in enumerate(youtube_urls):
     start_time = time.time()
     print(f"\n=== [{start+i+1}/{total_length}] PROCESSING ===")
 
-    audio_filename = f"FreestyleAI/temporary_garbage/audio_eng/battle_{start+i+1}.mp3"
+    audio_filename = f"FreestyleAI/temporary_garbage/audio_eng_final/battle_{start+i+1}.mp3"
 
     # download audio
     result = subprocess.run([
         "yt-dlp", "--cookies", "youtube_cookies.txt",
-        "-f", "bestaudio/best",
-        "-x", "--audio-format", "mp3",
+        "-f", "bestaudio/best",   # flexible, best available audio
+        "-x", "--audio-format", "mp3",  # extract to mp3
+        "--audio-quality", "0",   # best quality
         "--ignore-errors",
         "--no-playlist",
         "--retries", "5",
@@ -98,54 +99,54 @@ for i, url in enumerate(youtube_urls):
         continue
 
     # Prendi il titolo del video
-    with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-        info = ydl.extract_info(url, download=False)
-        video_title = info.get('title', 'NoTitle')
+    #with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+    #    info = ydl.extract_info(url, download=False)
+    #    video_title = info.get('title', 'NoTitle')
 
-    print("-> Trascrizione in corso...")
-    result = model.transcribe(audio_filename, word_timestamps=True, language="en")
+    # print("-> Trascrizione in corso...")
+    # result = model.transcribe(audio_filename, word_timestamps=True, language="en")
 
-    if "word_segments" in result:
-        words = result["word_segments"]
-        get_text = lambda w: w["text"].lower()
-    else:
-        words = []
-        for segment in result.get("segments", []):
-            if "words" in segment:
-                words.extend(segment["words"])
-        get_text = lambda w: w["word"].lower()
+    # if "word_segments" in result:
+    #     words = result["word_segments"]
+    #     get_text = lambda w: w["text"].lower()
+    # else:
+    #     words = []
+    #     for segment in result.get("segments", []):
+    #         if "words" in segment:
+    #             words.extend(segment["words"])
+    #     get_text = lambda w: w["word"].lower()
 
-    PAUSE_THRESHOLD = 0.5
-    lines = []
-    current_line = []
-    prev_end = None
+    # PAUSE_THRESHOLD = 0.5
+    # lines = []
+    # current_line = []
+    # prev_end = None
 
-    for w in words:
-        if prev_end is not None and (w["start"] - prev_end) > PAUSE_THRESHOLD:
-            line_start_time = current_line[0]["start"]
-            line_text = " ".join([get_text(pw) for pw in current_line])
-            line_text = " ".join(line_text.split())
-            mins = int(line_start_time // 60)
-            secs = int(line_start_time % 60)
-            timestamp = f"[{mins:02d}:{secs:02d}]"
-            lines.append(f"{timestamp} {line_text}")
-            current_line = []
-        current_line.append(w)
-        prev_end = w["end"]
+    # for w in words:
+    #     if prev_end is not None and (w["start"] - prev_end) > PAUSE_THRESHOLD:
+    #         line_start_time = current_line[0]["start"]
+    #         line_text = " ".join([get_text(pw) for pw in current_line])
+    #         line_text = " ".join(line_text.split())
+    #         mins = int(line_start_time // 60)
+    #         secs = int(line_start_time % 60)
+    #         timestamp = f"[{mins:02d}:{secs:02d}]"
+    #         lines.append(f"{timestamp} {line_text}")
+    #         current_line = []
+    #     current_line.append(w)
+    #     prev_end = w["end"]
 
-    if current_line:
-        line_start_time = current_line[0]["start"]
-        line_text = " ".join([get_text(pw) for pw in current_line])
-        line_text = " ".join(line_text.split())
-        mins = int(line_start_time // 60)
-        secs = int(line_start_time % 60)
-        timestamp = f"[{mins:02d}:{secs:02d}]"
-        lines.append(f"{timestamp} {line_text}")
+    # if current_line:
+    #     line_start_time = current_line[0]["start"]
+    #     line_text = " ".join([get_text(pw) for pw in current_line])
+    #     line_text = " ".join(line_text.split())
+    #     mins = int(line_start_time // 60)
+    #     secs = int(line_start_time % 60)
+    #     timestamp = f"[{mins:02d}:{secs:02d}]"
+    #     lines.append(f"{timestamp} {line_text}")
 
-    with open(output_dataset, "a", encoding="utf-8") as f:
-        f.write(f"[{video_title}]\n")
-        f.write("\n".join(lines))
-        f.write("\n\n")
+    # with open(output_dataset, "a", encoding="utf-8") as f:
+    #     f.write(f"[{video_title}]\n")
+    #     f.write("\n".join(lines))
+    #     f.write("\n\n")
 
-    print(f"✅ Trascrizione aggiunta a {output_dataset}")
-    print(f"--- Tempo trascrizione --- {(time.time() - start_time) / 60:.2f} minuti")
+    # print(f"✅ Trascrizione aggiunta a {output_dataset}")
+    # print(f"--- Tempo trascrizione --- {(time.time() - start_time) / 60:.2f} minuti")
