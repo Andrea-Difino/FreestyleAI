@@ -46,16 +46,17 @@ def processa_dataset(path_file, path_csv):
     with open(path_csv, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
         # intestazioni
-        writer.writerow(["battle_id", "artist1", "artist2", "battle_name", "timestamp", "lyric"])
+        writer.writerow(["battle_id", "artist1", "artist2", "battle_name", "timestamp", "bar"])
 
         for battle_id, battle in enumerate(battles, start=1):
             righe = battle.splitlines()
             if not righe:
                 continue
 
-            titolo = righe[0][6:-1]
-            artista1, artista2 = estrai_nomi_artisti(titolo)
+            titolo = re.sub(r'^\[S\d+\]\s*', '', righe[0])
+            titolo = re.sub(r'[\[\]]', '', titolo)
             battle_name = titolo.strip()
+            artista1, artista2 = estrai_nomi_artisti(battle_name)
 
             for riga in righe[1:]:
                 riga = riga.strip()
@@ -73,9 +74,9 @@ def processa_dataset(path_file, path_csv):
     print(f"CSV creato in: {path_csv}")
 
 if __name__ == "__main__":
-    indexed_dataset = "FreestyleAI/dataset_creation/dataset_freestyle_indexed.txt"
-    aggiungi_indici(
-        "FreestyleAI/dataset_creation/dataset_freestyle.txt",
-        indexed_dataset
-    )
-    #processa_dataset(indexed_dataset, "FreestyleAI/dataset_creation/output_battles.csv")
+    indexed_dataset = "FreestyleAI/dataset_creation/dataset_freestyle_clean.txt"
+    #aggiungi_indici(
+    #    "FreestyleAI/dataset_creation/dataset_freestyle.txt",
+    #    indexed_dataset
+    #)
+    processa_dataset(indexed_dataset, "FreestyleAI/dataset_creation/freestyle_dataset_kotd_clean.csv")
