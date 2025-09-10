@@ -114,7 +114,7 @@ def main():
     args = parser.parse_args()
 
     DEVICE = torch.device(args.device)
-    combined_corpus = "combined_corpus.txt"
+    combined_corpus = "FreestyleAI/dataset_creation/combined_corpus.txt"
 
     build_corpus(args.old_csv, args.new_csv, combined_corpus)
     new_spm_path = train_new_spm(combined_corpus, args.out_prefix, args.vocab_size)
