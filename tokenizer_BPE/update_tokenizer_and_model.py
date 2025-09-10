@@ -109,7 +109,7 @@ def main():
     parser.add_argument("--out-prefix", default="FreestyleAI/models/bpe_spm_updated")
     parser.add_argument("--out-model", default="models/bpe-model-updated.pt")
     parser.add_argument("--out-metadata", default="metadata/bpe-metadata-updated.pt")
-    parser.add_argument("--vocab-size", type=int, default=26000)
+    parser.add_argument("--vocab-size", type=int, default=30000)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
