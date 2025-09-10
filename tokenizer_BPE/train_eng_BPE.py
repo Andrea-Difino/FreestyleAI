@@ -6,18 +6,14 @@ from pathlib import Path
 import sentencepiece as spm
 from FreestyleAI import WordGramModel # type: ignore
 
-# ----------------------------------------------------------------------
-#   FUNZIONI di supporto (queste rimangono al livello globale)
-# ----------------------------------------------------------------------
 def make_dataset(tensor, block_size):
-    """Crea sequenze di lunghezza block_size+1 (x + y) senza overlap."""
+    """Create sequence of length block_size+1 (x + y) without overlap."""
     seq_len = block_size + 1
     n_blocks = (len(tensor) - 1) // seq_len
     tensor = tensor[: n_blocks * seq_len].view(n_blocks, seq_len)
     return TensorDataset(tensor)
 
 def unpack_batch(batch, device):
-    """Restituisce x, y già sul device."""
     seq = batch[0]                     # (B, block+1)  → CPU
     xb = seq[:, :-1].contiguous()
     yb = seq[:, 1:].contiguous()
@@ -39,9 +35,6 @@ def estimate_loss(model, train_loader, val_loader, eval_iters, device):
     model.train()
     return out
 
-# ----------------------------------------------------------------------
-#   MAIN – contiene tutto il codice che deve essere eseguito una sola volta
-# ----------------------------------------------------------------------
 def main():
     start_time = time.time()
 
@@ -177,8 +170,5 @@ def main():
             f"Val loss: {final_losses['val']:.4f}, Tempo (h): {hrs:.2f}\n"
         )
 
-# ----------------------------------------------------------------------
-#   ENTRY‑POINT
-# ----------------------------------------------------------------------
 if __name__ == "__main__":
     main()
