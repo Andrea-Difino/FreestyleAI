@@ -12,7 +12,7 @@ SPECIAL_TOKENS = ["<START>", "<END>", "<UNK>", "<LINE>"]
 CSV_PATH          = "FreestyleAI/updated_rappers.csv"     
 CORPUS_PATH       = "tmp_corpus.txt"                      
 SPM_MODEL_PREFIX  = "FreestyleAI/models/bpe_spm"          
-VOCAB_SIZE        = 26000                                 # BPE token number
+VOCAB_SIZE        = 30000                                 # BPE token number
 CHAR_COVERAGE     = 1.0                                   
 
 
