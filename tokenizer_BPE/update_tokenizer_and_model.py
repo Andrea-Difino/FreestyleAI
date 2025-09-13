@@ -1,9 +1,13 @@
 import argparse
 import pandas as pd
 from pathlib import Path
+import regex as re
 import sentencepiece as spm
 import torch
 from FreestyleAI import WordGramModel #type: ignore
+
+GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
+_SPLIT_RE = re.compile(GPT4_SPLIT_PATTERN)
 
 # --------------------- Helper SentencePiece ---------------------
 def _sp_piece_size(sp):
@@ -61,29 +65,76 @@ def remap_and_expand_model_by_pieces(model, sp_old, sp_new, device):
     print(f"✅ Copiati {copied} token; nuovi token: {new_vocab - copied}")
     return new_model, new_vocab
 
-# --------------------- Build corpus combinato ---------------------
+def clean_text(text: str) -> str:
+    # normalizza spazi multipli e trim
+    return re.sub(r"\s+", " ", str(text)).strip()
+
+def is_informative(word: str) -> bool:
+    w = word.strip()
+    if not w:
+        return False
+    if w.lower() in {"<unk>", "<line>", "<start>", "<end>"}:
+        return False
+    if w.isdigit():
+        return True
+    if re.fullmatch(r"[a-zA-Z']+", w):
+        return True
+    return w == " "
+
+
+def split_line(line: str):
+    return (m.group(0) for m in _SPLIT_RE.finditer(line))
+
 def build_corpus(old_csv, new_csv, combined_corpus_path):
     print("📚 Creazione corpus combinato...")
 
-    # Vecchio dataset
+    # === Vecchio dataset ===
     df_old = pd.read_csv(old_csv, usecols=["song", "lyric"])
     grouped_old = df_old.groupby("song")["lyric"].apply(list)
+
     old_lines = []
     for lyrics in grouped_old:
-        for line in lyrics:
-            line = str(line).replace("\n"," ").strip()
-            if line:
-                old_lines.append(line + "\n")
+        tokens = ["<START>"]
+        for i, line in enumerate(lyrics):
+            line = clean_text(line.lower())
+            if not line:
+                continue
 
-    # Nuovo dataset
-    df_new = pd.read_csv(new_csv, usecols=["bar"])
-    new_lines = [str(b).replace("\n"," ").strip() + "\n" for b in df_new['bar'].dropna()]
+            # tokenizza e filtra token non informativi
+            for w in split_line(line):
+                tokens.append(w if is_informative(w) else "<UNK>")
 
-    # Scrivi corpus combinato
+            if i < len(lyrics) - 1:
+                tokens.append("<LINE>")
+        tokens.append("<END>")
+        old_lines.append(" ".join(tokens) + "\n")
+
+    # === Nuovo dataset ===
+    df_new = pd.read_csv(new_csv, usecols=["battle_id", "bar"])
+    grouped_new = df_new.groupby("battle_id")["bar"].apply(list)
+
+    new_lines = []
+    for bars in grouped_new:
+        tokens = ["<START>"]
+        for i, bar in enumerate(bars):
+            bar = clean_text(bar.lower())
+            if not bar:
+                continue
+
+            for w in split_line(bar):
+                tokens.append(w if is_informative(w) else "<UNK>")
+
+            if i < len(bars) - 1:
+                tokens.append("<LINE>")
+        tokens.append("<END>")
+        new_lines.append(" ".join(tokens) + "\n")
+
+    # === Scrittura corpus combinato ===
     with open(combined_corpus_path, "w", encoding="utf-8") as fout:
         fout.writelines(old_lines + new_lines)
 
     print(f"✅ Corpus salvato in {combined_corpus_path}")
+
 
 # --------------------- Train SentencePiece ---------------------
 def train_new_spm(corpus_path, model_prefix, vocab_size):
@@ -92,8 +143,12 @@ def train_new_spm(corpus_path, model_prefix, vocab_size):
         f"--model_prefix={model_prefix} "
         f"--vocab_size={vocab_size} "
         "--model_type=bpe "
-        "--unk_id=0 --bos_id=1 --eos_id=2 "
-        "--user_defined_symbols=<LINE> "
+        "--unk_id=0 "
+        "--bos_id=-1 "
+        "--eos_id=-1 "             
+        "--pad_id=1 "        
+        "--user_defined_symbols=<START>,<END>,<UNK>,<LINE> "   
+        "--max_sentence_length=5000 "
     )
     print("🚀 Riallenamento SentencePiece...")
     spm.SentencePieceTrainer.Train(cmd)
@@ -102,14 +157,14 @@ def train_new_spm(corpus_path, model_prefix, vocab_size):
 # --------------------- MAIN ---------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--old-spm", required=True)
-    parser.add_argument("--old-model", required=True)
+    parser.add_argument("--old-spm", default="FreestyleAI/models/bpe_spm.model")
+    parser.add_argument("--old-model", default="FreestyleAI/models/bpe-model.pt")
     parser.add_argument("--old-csv", default="FreestyleAI/updated_rappers.csv")
-    parser.add_argument("--new-csv", required=True)
+    parser.add_argument("--new-csv", default="FreestyleAI/dataset_creation/freestyle_dataset_kotd_clean.csv")
     parser.add_argument("--out-prefix", default="FreestyleAI/models/bpe_spm_updated")
-    parser.add_argument("--out-model", default="models/bpe-model-updated.pt")
-    parser.add_argument("--out-metadata", default="metadata/bpe-metadata-updated.pt")
-    parser.add_argument("--vocab-size", type=int, default=30000)
+    parser.add_argument("--out-model", default="FreestyleAI/models/bpe-model-updated.pt")
+    parser.add_argument("--out-metadata", default="FreestyleAI/metadata/bpe-metadata-updated.pt")
+    parser.add_argument("--vocab-size", type=int, default=34000)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 

@@ -1,6 +1,5 @@
 import pandas as pd
 import regex as re
-import random
 import sentencepiece as spm
 from pathlib import Path
 from tqdm import tqdm
@@ -52,9 +51,7 @@ def process_one_song(lyrics: list[str]) -> list[str]:
         for w in split_line(line):
             tokens.append(w if is_informative(w) else "<UNK>")
 
-        if i < len(lyrics) - 1:
-            if sum(1 for t in split_line(line) if is_informative(t)) >= 6 or random.random() < 0.3:
-                tokens.append("<LINE>")
+        tokens.append("<LINE>")
     # last <LINE> become <END>
     if tokens[-1] == "<LINE>":
         tokens[-1] = "<END>"
@@ -108,13 +105,13 @@ def train_spm(corpus_path: str,
         f"--model_prefix={model_prefix} "
         f"--vocab_size={vocab_size} "
         f"--character_coverage={character_coverage} "
-        "--model_type=bpe "
-        "--pad_id=-1 "            
-        "--unk_id=0 "             
-        "--bos_id=1 "             
-        "--eos_id=2 "            
-        "--user_defined_symbols=<LINE> "   #extra simbol
-        "--max_sentence_length=6000 "
+        "--model_type=bpe "         
+        "--unk_id=0 "
+        "--bos_id=-1 "
+        "--eos_id=-1 "             
+        "--pad_id=1 "        
+        "--user_defined_symbols=<START>,<END>,<UNK>,<LINE> "   
+        "--max_sentence_length=5000 "
     )
     print("🚀  Addestramento SentencePiece …")
     spm.SentencePieceTrainer.Train(spm_cmd)

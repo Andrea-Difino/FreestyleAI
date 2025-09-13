@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torch.utils.data import TensorDataset, DataLoader
 from pathlib import Path
+import numpy as np
 import sentencepiece as spm
 from FreestyleAI import WordGramModel # type: ignore
 
@@ -58,79 +59,98 @@ def main():
     print(f"📦  Numero di token (lunghezza del corpus): {len(ids_int):,}")
 
     # ------------------- Hyper‑params -------------------
-    batch_size = 256
+    batch_size = 64
     block_size = 32
     eval_iters = 200
-    n_embd     = 256
-    learning_rate = 0.05
+    n_embd     = 384
+    learning_rate = 0.001
     momentum = 0.9
     epochs   = 125
     patience = 10
+    plot_interval = 20  # aggiornamento grafico ogni N batch
 
-    # ------------------- Train / Val split (CPU tensors) -------------------
+    # ------------------- Train / Val split -------------------
     split_idx = int(0.8 * len(ids_int))
-    train_ids = torch.tensor(ids_int[:split_idx], dtype=torch.long)   # CPU
-    val_ids   = torch.tensor(ids_int[split_idx:], dtype=torch.long)   # CPU
+    train_ids = torch.tensor(ids_int[:split_idx], dtype=torch.long)
+    val_ids   = torch.tensor(ids_int[split_idx:], dtype=torch.long)
 
     train_dataset = make_dataset(train_ids, block_size)
     val_dataset   = make_dataset(val_ids, block_size)
 
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        pin_memory=True,          
-        num_workers=4,
-        drop_last=True,
-    )
-
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        pin_memory=True,
-        num_workers=2,
-        drop_last=True,
-    )
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+                              pin_memory=True, num_workers=0, drop_last=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False,
+                            pin_memory=True, num_workers=0, drop_last=True)
 
     # ------------------- Model & Optimizer -------------------
     model = WordGramModel(VOCAB_SIZE).to(DEVICE)
-    optimizer = torch.optim.SGD(
-        model.parameters(),
-        lr=learning_rate,
-        momentum=momentum,
-    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    # ------------------- Setup live plot -------------------
+    plt.ion()
+    fig, axs = plt.subplots(1, 3, figsize=(18,5))
+    axs = axs.flatten()
+    losses_plot = []
+    line_loss, = axs[0].plot([], [], label="Train Loss")
+    axs[0].set_title("Train loss per batch")
+    axs[0].set_xlabel("Step")
+    axs[0].set_ylabel("Loss")
+    axs[0].legend()
 
     # ------------------- Training loop -------------------
-    print("\n🛠️  Inizio addestramento del modello...")
     best_loss = float('inf')
     no_improve = 0
-    epoch_losses = []
 
     for epoch in range(epochs):
-        total = 0.0
-        pbar = tqdm(train_loader,
-                    desc=f"Epoch {epoch+1}/{epochs}",
-                    leave=False)
-
-        for batch in pbar:
+        total_loss = 0.0
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}", leave=False)
+        
+        for batch_idx, batch in enumerate(pbar, 1):
             xb, yb = unpack_batch(batch, DEVICE)
-            _, loss = model(xb, yb)
+
+            # forward con attivazioni
+            logits, loss, activations = model(xb, yb, return_activations=True)
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
 
-            total += loss.item()
+            total_loss += loss.item()
+            losses_plot.append(loss.item())
             pbar.set_postfix(loss=loss.item())
 
-        avg = total / len(train_loader)
-        epoch_losses.append(avg)
-        print(f"\n📈  Avg train loss epoch {epoch+1}: {avg:.4f}")
+            # --- Aggiorna plot solo ogni N batch ---
+            if batch_idx % plot_interval == 0:
+                # Loss
+                line_loss.set_xdata(range(len(losses_plot)))
+                line_loss.set_ydata(losses_plot)
+                axs[0].relim(); axs[0].autoscale_view()
 
-        # Early‑stopping
-        if avg < best_loss:
-            best_loss = avg
+                # Gradienti
+                axs[1].cla()
+                all_grads = [p.grad.view(-1).cpu().numpy() for p in model.parameters() if p.grad is not None]
+                if all_grads:
+                    all_grads = np.concatenate(all_grads)
+                    axs[1].hist(all_grads, bins=20, color="blue", alpha=0.7)
+                    axs[1].set_title("Distribuzione gradienti")
+
+                # Attivazioni neuroni
+                axs[2].cla()
+                mean_acts = [act.abs().mean().item() for act in activations]
+                axs[2].bar(range(len(mean_acts)), mean_acts, color="orange", alpha=0.7)
+                axs[2].set_title("Attivazioni medie dei neuroni")
+                axs[2].set_xlabel("Layer")
+                axs[2].set_ylabel("Mean abs activation")
+
+                plt.draw()
+                plt.pause(0.01)
+
+        avg_epoch_loss = total_loss / len(train_loader)
+        print(f"\n📈  Avg train loss epoch {epoch+1}: {avg_epoch_loss:.4f}")
+
+        # Early-stopping
+        if avg_epoch_loss < best_loss:
+            best_loss = avg_epoch_loss
             no_improve = 0
         else:
             no_improve += 1
@@ -138,21 +158,15 @@ def main():
                 print("⏹️  Early stopping triggered")
                 break
 
-    # ------------------- Plot loss -------------------
-    plt.figure()
-    plt.plot(epoch_losses, marker='o')
-    plt.title("Train loss per epoch")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.grid(True)
-    plt.savefig("FreestyleAI/performance/BPE_loss_plot.png")
+    plt.ioff()
+    fig.savefig("FreestyleAI/performance/BPE_training_plots.png")
     plt.close()
 
     # ------------------- Final evaluation -------------------
     final_losses = estimate_loss(model, train_loader, val_loader, eval_iters, DEVICE)
     print("\n🔎  Final loss:", final_losses)
 
-    # ------------------- Save model + minimal metadata -------------------
+    # ------------------- Save model + metadata -------------------
     torch.save(model.state_dict(), "FreestyleAI/models/bpe-model.pt")
     torch.save({
         "sp_model_path": SPM_MODEL_PATH,
@@ -162,7 +176,7 @@ def main():
     }, "FreestyleAI/metadata/bpe-metadata.pt")
 
     # ------------------- Timing -------------------
-    hrs = (time.time() - start_time) / 3600.0   # ore, non 120!
+    hrs = (time.time() - start_time) / 3600.0
     print(f"\n⏱️  Tempo di esecuzione: {hrs:.2f} ore")
     with open("FreestyleAI/performance/performance_log.txt", "a") as f:
         f.write(

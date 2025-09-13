@@ -126,6 +126,12 @@ def main():
             best_loss = avg
             no_improve = 0
             torch.save(model.state_dict(), "FreestyleAI/models/bpe-model-finetuned.pt")
+            torch.save({
+                "sp_model_path": SPM_MODEL_PATH,
+                "context_size": block_size,
+                "embedding_dim": n_embd,
+                "vocab_size": VOCAB_SIZE,
+            }, "FreestyleAI/metadata/bpe-metadata-finetuned.pt")
         else:
             no_improve += 1
             if no_improve >= patience:
