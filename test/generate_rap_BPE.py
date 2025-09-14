@@ -6,8 +6,8 @@ from FreestyleAI import WordGramModel # type: ignore
 
 
 DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm.model"   
-MODEL_STATE_PATH = "FreestyleAI/models/bpe-model.pt"    
+SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm_updated.model"   
+MODEL_STATE_PATH = "FreestyleAI/models/bpe-model-finetuned.pt"    
 MAX_TOKENS      = 150      # lunghezza massima della sequenza generata
 TEMPERATURE     = 1.3     # temperatura di base (più alta → più casuale)
 TOP_K           = 20       # 0 = disabled, altrimenti tiene i K token più probabili

@@ -162,7 +162,15 @@ def main():
 
     # ------------------- Timing -------------------
     hrs = (time.time() - start_time) / 3600.0
+    with open("FreestyleAI/performance/performance_log.txt", "a") as f:
+        f.write(
+            f"\nBPE_SPM-Model-finetuning - Train loss: {final_losses['train']:.4f}, "
+            f"Val loss: {final_losses['val']:.4f}, Tempo (h): {hrs:.2f}\n"
+        )
+
     print(f"\n⏱️  Tempo di esecuzione: {hrs:.2f} ore")
+
+
 
 if __name__ == "__main__":
     main()

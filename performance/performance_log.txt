@@ -50,3 +50,5 @@ BPE_SPM-Model - Train loss: 3.8482, Val loss: 4.3931, Tempo (h): 8.13
 BPE_SPM-Model - Train loss: 3.7512, Val loss: 4.3034, Tempo (h): 8.64
 
 BPE_SPM-Model - Train loss: 2.4866, Val loss: 4.6574, Tempo (h): 18.98
+
+BPE_SPM-Model-finetuning Train loss: 3.2892880, Val loss: 4.4021173, Tempo (h): 5.39
