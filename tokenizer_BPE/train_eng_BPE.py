@@ -63,11 +63,10 @@ def main():
     block_size = 32
     eval_iters = 200
     n_embd     = 384
-    learning_rate = 0.001
-    momentum = 0.9
+    learning_rate = 0.0005
     epochs   = 125
     patience = 10
-    plot_interval = 20  # aggiornamento grafico ogni N batch
+    plot_interval = 64  # aggiornamento grafico ogni N batch
 
     # ------------------- Train / Val split -------------------
     split_idx = int(0.8 * len(ids_int))

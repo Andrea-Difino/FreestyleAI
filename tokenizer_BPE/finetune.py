@@ -60,11 +60,11 @@ def main():
     print(f"📦  Numero di token (lunghezza del corpus): {len(ids_int):,}")
 
     # ------------------- Hyper-params (puoi abbassare LR per FT) -------------------
-    batch_size = 256
+    batch_size = 64
     block_size = 32
     eval_iters = 200
-    n_embd     = 256
-    learning_rate = 0.005   
+    n_embd     = 384
+    learning_rate = 0.0005   
     momentum = 0.9
     epochs   = 30           # di solito meno epoche per FT
     patience = 5
@@ -166,3 +166,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+#Final loss: {'train': 3.2892880713939667, 'val': 4.402117341756821}
+
+#Tempo di esecuzione: 5.39 ore
+

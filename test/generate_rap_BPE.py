@@ -8,10 +8,10 @@ from FreestyleAI import WordGramModel # type: ignore
 DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm.model"   
 MODEL_STATE_PATH = "FreestyleAI/models/bpe-model.pt"    
-MAX_TOKENS      = 80      # lunghezza massima della sequenza generata
+MAX_TOKENS      = 150      # lunghezza massima della sequenza generata
 TEMPERATURE     = 1.3     # temperatura di base (più alta → più casuale)
 TOP_K           = 20       # 0 = disabled, altrimenti tiene i K token più probabili
-TOP_P           = 0     # nucleus sampling (0 = disabled)
+TOP_P           = 0.9     # nucleus sampling (0 = disabled)
 BLOCK_SIZE      = 32      
 
 sp = spm.SentencePieceProcessor()
@@ -20,9 +20,10 @@ sp.Load(SPM_MODEL_PATH)
 VOCAB_SIZE   = sp.GetPieceSize()
 START_ID = sp.PieceToId("<START>")
 END_ID   = sp.PieceToId("<END>")
+PAD_ID = sp.pad_id()
 LINE_ID      = sp.PieceToId("<LINE>")  # se il tuo modello lo usa
 
-print(f"🔠  Vocabulary size: {VOCAB_SIZE}   START={START_ID}  END={END_ID}  LINE={LINE_ID}")
+print(f"🔠  Vocabulary size: {VOCAB_SIZE}   START={START_ID}  END={END_ID}  LINE={LINE_ID} PAD={PAD_ID}")
 
 model = WordGramModel(VOCAB_SIZE)
 model.load_state_dict(torch.load(MODEL_STATE_PATH, map_location="cuda"))
@@ -79,7 +80,7 @@ def generate_text(model, sp, max_tokens: int = MAX_TOKENS, temperature: float = 
     """
     model.eval()
     # contesto iniziale = BOS + padding di BOS (così il modello ha sempre block_size token)
-    context = [START_ID] * block_size
+    context = [START_ID] + [PAD_ID]*(block_size-1)
 
     generated_ids = []          # solo i token *generati* (esclude il padding iniziale)
     entropies = []              # opzionale: per analisi
@@ -129,6 +130,7 @@ def generate_text(model, sp, max_tokens: int = MAX_TOKENS, temperature: float = 
     text = sp.DecodeIds(generated_ids)
     # Se vuoi trasformare il token <LINE> in un ritorno a capo:
     text = text.replace("<LINE>", "\n")
+    text = text.replace("<END>", "")
     # (Puoi anche rimuovere eventuali token di padding residui)
     return generated_ids, text, entropies
 
