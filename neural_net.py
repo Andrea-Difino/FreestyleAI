@@ -6,7 +6,7 @@ block_size = 32 #number of words to be processed in parallel
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
 n_embd = 384
 n_head = 4 #n_head = n_embd // head_size
-dropout = 0.2
+dropout = 0.15
 
 class Head(nn.Module): 
     """one head of self-attention"""
@@ -57,7 +57,7 @@ class FeedForward(nn.Module):
          nn.Linear(n_emb, 4 * n_emb),
          nn.GELU(),
          nn.Linear(4 * n_emb, n_emb),
-         nn.Dropout(.2)
+         nn.Dropout(dropout)
       )    
 
     def forward(self, x):
@@ -74,8 +74,8 @@ class Block(nn.Module):
       self.ln2 = nn.LayerNorm(n_embd)
 
     def forward(self , x): 
-      x = x + self.ln1(self.sa(x))
-      x = x + self.ln2(self.ffwd(x))
+      x = x + self.sa(self.ln1(x))
+      x = x + self.ffwd(self.ln2(x))
       return x
 
 class WordGramModel(nn.Module):
