@@ -52,11 +52,11 @@ with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
 '''
 
-youtube_urls = []
+youtube_urls = ["https://www.youtube.com/watch?v=DjSbbP7eajc"]
 
-with open("FreestyleAI/dataset_creation/youtubelinks.txt", "r") as f: 
-    for line in f.readlines():
-        youtube_urls.append(line[:-1])
+#with open("FreestyleAI/dataset_creation/youtubelinks.txt", "r") as f: 
+#    for line in f.readlines():
+#        youtube_urls.append(line[:-1])
 
 total_length = len(youtube_urls)        
 youtube_urls = youtube_urls[start:]
@@ -65,44 +65,42 @@ print(youtube_urls)
 # Loading medium model for faster transcription and a good level of transcription
 model = whisper.load_model("medium", device = DEVICE)  
 
-os.makedirs("FreestyleAI/temporary_garbage/audio_eng_final", exist_ok=True)
+os.makedirs("FreestyleAI/temporary_garbage/prova", exist_ok=True)
 
 output_dataset = "FreestyleAI/dataset_creation/dataset_freestyle.txt"
 
 failed_downloads = []   # lista per link falliti
 
 for i, url in enumerate(youtube_urls):
-    if i != 6: 
-        continue 
 
     start_time = time.time()
     print(f"\n=== [{start+i+1}/{total_length}] PROCESSING ===")
 
-    audio_filename = f"FreestyleAI/temporary_garbage/audio_eng_final/battle_{start+i+1}.mp3"
+    audio_filename = f"FreestyleAI/temporary_garbage/audio_eng_final/battle_681.mp3"
 
     # download audio
     result = subprocess.run([
-        "yt-dlp", "--cookies", "youtube_cookies.txt",
-        "-f", "bestaudio/best",
-        "-x", "--audio-format", "mp3",
-        "--audio-quality", "0",
-        "--ignore-errors",
-        "--no-playlist",
-        "--retries", "5",
-        "--fragment-retries", "5",
-        "-o", audio_filename,
-        url
+       "yt-dlp", "--cookies", "youtube_cookies.txt",
+       "-f", "bestaudio/best",
+       "-x", "--audio-format", "mp3",
+       "--audio-quality", "0",
+       "--ignore-errors",
+       "--no-playlist",
+       "--retries", "5",
+       "--fragment-retries", "5",
+       "-o", audio_filename,
+       url
     ])
 
     if result.returncode != 0:
-        print(f"❌ Download fallito per {url}")
-        failed_downloads.append(url)
-        continue
+       print(f"❌ Download fallito per {url}")
+       failed_downloads.append(url)
+       continue
 
     if not os.path.exists(audio_filename):
-        print(f"❌ Audio non trovato per il link {url}")
-        failed_downloads.append(url)
-        continue
+       print(f"❌ Audio non trovato per il link {url}")
+       failed_downloads.append(url)
+       continue
 
     print(f"✅ Audio scaricato: {audio_filename}")
 
@@ -158,71 +156,3 @@ for i, url in enumerate(youtube_urls):
 
     print(f"✅ Trascrizione aggiunta a {output_dataset}")
     print(f"--- Tempo trascrizione --- {(time.time() - start_time) / 60:.2f} minuti")
-
-# # Alla fine dello script:
-# if failed_downloads:
-#     print("\n📌 Download falliti:")
-#     for link in failed_downloads:
-#         print(" -", link)
-
-#     # Se vuoi salvarli su file per riprovarli
-#     with open("failed_downloads.txt", "w") as f:
-#         for link in failed_downloads:
-#             f.write(link + "\n")
-
-#     print("\n❗ Lista salvata in failed_downloads.txt")
-# else:
-#     print("\n🎉 Tutti i download riusciti!")
-
-    # Prendi il titolo del video
-    #with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-    #    info = ydl.extract_info(url, download=False)
-    #    video_title = info.get('title', 'NoTitle')
-
-    # print("-> Trascrizione in corso...")
-    # result = model.transcribe(audio_filename, word_timestamps=True, language="en")
-
-    # if "word_segments" in result:
-    #     words = result["word_segments"]
-    #     get_text = lambda w: w["text"].lower()
-    # else:
-    #     words = []
-    #     for segment in result.get("segments", []):
-    #         if "words" in segment:
-    #             words.extend(segment["words"])
-    #     get_text = lambda w: w["word"].lower()
-
-    # PAUSE_THRESHOLD = 0.5
-    # lines = []
-    # current_line = []
-    # prev_end = None
-
-    # for w in words:
-    #     if prev_end is not None and (w["start"] - prev_end) > PAUSE_THRESHOLD:
-    #         line_start_time = current_line[0]["start"]
-    #         line_text = " ".join([get_text(pw) for pw in current_line])
-    #         line_text = " ".join(line_text.split())
-    #         mins = int(line_start_time // 60)
-    #         secs = int(line_start_time % 60)
-    #         timestamp = f"[{mins:02d}:{secs:02d}]"
-    #         lines.append(f"{timestamp} {line_text}")
-    #         current_line = []
-    #     current_line.append(w)
-    #     prev_end = w["end"]
-
-    # if current_line:
-    #     line_start_time = current_line[0]["start"]
-    #     line_text = " ".join([get_text(pw) for pw in current_line])
-    #     line_text = " ".join(line_text.split())
-    #     mins = int(line_start_time // 60)
-    #     secs = int(line_start_time % 60)
-    #     timestamp = f"[{mins:02d}:{secs:02d}]"
-    #     lines.append(f"{timestamp} {line_text}")
-
-    # with open(output_dataset, "a", encoding="utf-8") as f:
-    #     f.write(f"[{video_title}]\n")
-    #     f.write("\n".join(lines))
-    #     f.write("\n\n")
-
-    # print(f"✅ Trascrizione aggiunta a {output_dataset}")
-    # print(f"--- Tempo trascrizione --- {(time.time() - start_time) / 60:.2f} minuti")

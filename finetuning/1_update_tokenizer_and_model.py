@@ -1,10 +1,20 @@
 import argparse
+import os
+import zipfile
 import pandas as pd
 from pathlib import Path
 import regex as re
 import sentencepiece as spm
+import subprocess
+import shutil
+import sys
 import torch
-from FreestyleAI import WordGramModel #type: ignore
+# Robust import: try package import, else fall back to local module path
+try:
+    from FreestyleAI import WordGramModel  # type: ignore
+except ModuleNotFoundError:
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    from neural_net import WordGramModel  # type: ignore
 
 GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
 _SPLIT_RE = re.compile(GPT4_SPLIT_PATTERN)
@@ -154,13 +164,79 @@ def train_new_spm(corpus_path, model_prefix, vocab_size):
     spm.SentencePieceTrainer.Train(cmd)
     return f"{model_prefix}.model"
 
+# --------------------- Kaggle download helpers ---------------------
+def ensure_kaggle_cli() -> list[str]:
+    """Return the kaggle CLI invocation (argv list), preferring binary in PATH, else python -m kaggle."""
+    path_exe = shutil.which("kaggle")
+    if path_exe:
+        return [path_exe]
+    # Fallback to python -m kaggle
+    return [sys.executable, "-m", "kaggle"]
+
+def kaggle_dataset_download(owner_slug: str, outfile: Path, filename_in_dataset: str | None = None) -> Path:
+    """Download a file from a Kaggle dataset using kaggle CLI.
+
+    owner_slug: e.g., "<owner>/<dataset_slug>"
+    outfile: local path (zip or csv) destination directory or file
+    filename_in_dataset: the exact filename inside the Kaggle dataset to fetch
+    """
+    kaggle = ensure_kaggle_cli()
+
+    # Create output dir
+    out_dir = outfile if outfile.is_dir() else outfile.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    base_cmd = kaggle + ["datasets", "download", "-d", owner_slug, "-p", str(out_dir)]
+    if filename_in_dataset:
+        base_cmd += ["-f", filename_in_dataset]
+
+    print(f"📥 Scarico da Kaggle: {' '.join(base_cmd)}")
+    result = subprocess.run(base_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(result.stdout)
+        print(result.stderr)
+        raise RuntimeError("Download Kaggle fallito. Verifica autenticazione e nomi.")
+
+    # Find the downloaded file (zip or direct csv)
+    # Kaggle typically saves as filename.zip
+    downloaded = None
+    for p in out_dir.glob("*.zip"):
+        downloaded = p
+        break
+    if downloaded is None and filename_in_dataset:
+        # maybe direct file
+        cand = out_dir / Path(filename_in_dataset).name
+        if cand.exists():
+            downloaded = cand
+
+    if downloaded is None:
+        raise FileNotFoundError("File scaricato non trovato in output.")
+
+    # If zip, extract and return the path to CSV
+    if downloaded.suffix.lower() == ".zip":
+        with zipfile.ZipFile(downloaded, 'r') as zf:
+            zf.extractall(out_dir)
+        # Heuristic: prefer provided filename, else first CSV
+        if filename_in_dataset:
+            cand = out_dir / Path(filename_in_dataset).name
+            if cand.exists():
+                return cand
+        for p in out_dir.glob("*.csv"):
+            return p
+        # fallback return the extracted dir
+        return out_dir
+    else:
+        return downloaded
+
 # --------------------- MAIN ---------------------
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--old-spm", default="FreestyleAI/models/bpe_spm.model")
     parser.add_argument("--old-model", default="FreestyleAI/models/bpe-model.pt")
     parser.add_argument("--old-csv", default="FreestyleAI/updated_rappers.csv")
-    parser.add_argument("--new-csv", default="FreestyleAI/dataset_creation/freestyle_dataset_kotd_clean.csv")
+    parser.add_argument("--kaggle-dataset", default="andreadifino/freestyle-battles")
+    parser.add_argument("--kaggle-file", default="freestyle_dataset_kotd_clean.csv")
+    parser.add_argument("--kaggle-outdir", default="FreestyleAI/dataset_creation/kaggle", help="Cartella dove scaricare il file Kaggle")
     parser.add_argument("--out-prefix", default="FreestyleAI/models/bpe_spm_updated")
     parser.add_argument("--out-model", default="FreestyleAI/models/bpe-model-updated.pt")
     parser.add_argument("--out-metadata", default="FreestyleAI/metadata/bpe-metadata-updated.pt")
@@ -171,7 +247,29 @@ def main():
     DEVICE = torch.device(args.device)
     combined_corpus = "FreestyleAI/dataset_creation/combined_corpus.txt"
 
-    build_corpus(args.old_csv, args.new_csv, combined_corpus)
+    # If Kaggle dataset info provided, download and override new_csv
+    new_csv_path = ""
+    if args.kaggle_dataset:
+        outdir = Path(args.kaggle_outdir)
+        outdir.mkdir(parents=True, exist_ok=True)
+        try:
+            downloaded_path = kaggle_dataset_download(args.kaggle_dataset, outdir, args.kaggle_file)
+        except Exception as e:
+            print(f"⚠️ Errore download Kaggle: {e}")
+            print("Proseguo con il path locale --new-csv se presente...")
+        else:
+            # Determine CSV path
+            if downloaded_path.is_dir():
+                # find first CSV
+                csvs = list(downloaded_path.glob("*.csv"))
+                if not csvs:
+                    raise FileNotFoundError("Nessun CSV trovato dopo l'estrazione Kaggle")
+                new_csv_path = csvs[0]
+            else:
+                new_csv_path = downloaded_path
+        print(f"📄 CSV nuovo dataset: {new_csv_path}")
+
+    build_corpus(args.old_csv, str(new_csv_path), combined_corpus)
     new_spm_path = train_new_spm(combined_corpus, args.out_prefix, args.vocab_size)
 
     sp_old = spm.SentencePieceProcessor(); sp_old.Load(args.old_spm)
