@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-block_size = 32 #number of words to be processed in parallel
+block_size = 64 #number of words to be processed in parallel
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
 n_embd = 384
 n_head = 4 #n_head = n_embd // head_size
@@ -129,3 +129,4 @@ class WordGramModel(nn.Module):
             return logits, loss, activations
         else:
             return logits, loss
+        

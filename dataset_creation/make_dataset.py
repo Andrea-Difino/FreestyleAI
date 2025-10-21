@@ -56,6 +56,7 @@ def processa_dataset(path_file, path_csv):
             titolo = re.sub(r'^\[S\d+\]\s*', '', righe[0])
             titolo = re.sub(r'[\[\]]', '', titolo)
             battle_name = titolo.strip()
+
             artista1, artista2 = estrai_nomi_artisti(battle_name)
 
             for riga in righe[1:]:
@@ -63,7 +64,7 @@ def processa_dataset(path_file, path_csv):
                 if not riga:
                     continue
 
-                match = re.match(r"\[(\d{2}:\d{2}(?::\d{2})?)\]\s*(.*)", riga)
+                match = re.match(r"\[(\d+:\d{2}(?::\d{2})?)\]\s*(.*)", riga)
                 if match:
                     timestamp, testo = match.groups()
                 else:
@@ -74,9 +75,9 @@ def processa_dataset(path_file, path_csv):
     print(f"CSV creato in: {path_csv}")
 
 if __name__ == "__main__":
-    indexed_dataset = "FreestyleAI/dataset_creation/dataset_freestyle_clean.txt"
+    indexed_dataset = "FreestyleAI/dataset_creation/dataset_freestyle_full.txt"
     #aggiungi_indici(
     #    "FreestyleAI/dataset_creation/dataset_freestyle.txt",
     #    indexed_dataset
     #)
-    processa_dataset(indexed_dataset, "FreestyleAI/dataset_creation/freestyle_dataset_kotd_clean.csv")
+    processa_dataset(indexed_dataset, "FreestyleAI/dataset_creation/freestyle_dataset_kotd_full.csv")
