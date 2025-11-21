@@ -4,21 +4,20 @@ import torch.nn.functional as F
 
 block_size = 64 #number of words to be processed in parallel
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
-n_embd = 384
 n_head = 4 #n_head = n_embd // head_size
-dropout = 0.15
+DROPOUT = 0.15
 
 class Head(nn.Module): 
     """one head of self-attention"""
-    def __init__(self, head_size):
+    def __init__(self, head_size, emb_size):
       super().__init__()
       self.head_s = head_size
-      self.query = nn.Linear(n_embd, head_size, bias=False)
-      self.key = nn.Linear(n_embd, head_size, bias=False)
-      self.value = nn.Linear(n_embd, head_size, bias=False)
+      self.query = nn.Linear(emb_size, head_size, bias=False)
+      self.key = nn.Linear(emb_size, head_size, bias=False)
+      self.value = nn.Linear(emb_size, head_size, bias=False)
       self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size, dtype=torch.bool)))
 
-      self.dropout = nn.Dropout(dropout)
+      self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
       B,T,C = x.shape
@@ -27,7 +26,7 @@ class Head(nn.Module):
       v = self.value(x)
 
       #compute attention scores "affinities"
-      wei = q @ k.transpose(-2 , -1) * self.head_s**-0.5
+      wei = q @ k.transpose(-2 , -1) * self.head_s ** -0.5
       wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
       wei = F.softmax(wei,dim=-1) #softmax over rows
 
@@ -38,11 +37,11 @@ class Head(nn.Module):
     
 class MultiHeadAttention(nn.Module): 
     """multiple heads running in parallel"""
-    def __init__(self, head_size):
+    def __init__(self, head_size, emb_size):
       super().__init__()
-      self.heads = nn.ModuleList([Head(head_size) for _ in range(n_head)])
-      self.proj = nn.Linear(head_size * n_head, n_embd)
-      self.dropout = nn.Dropout(dropout)
+      self.heads = nn.ModuleList([Head(head_size, emb_size) for _ in range(n_head)])
+      self.proj = nn.Linear(head_size * n_head, emb_size)
+      self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x): 
       out = torch.cat([h(x) for h in self.heads], dim=-1)
@@ -57,7 +56,7 @@ class FeedForward(nn.Module):
          nn.Linear(n_emb, 4 * n_emb),
          nn.GELU(),
          nn.Linear(4 * n_emb, n_emb),
-         nn.Dropout(dropout)
+         nn.Dropout(DROPOUT)
       )    
 
     def forward(self, x):
@@ -68,7 +67,7 @@ class Block(nn.Module):
     def __init__(self, n_embd):
       super().__init__()
       head_size = n_embd // n_head
-      self.sa = MultiHeadAttention(head_size)
+      self.sa = MultiHeadAttention(head_size, n_embd)
       self.ffwd = FeedForward(n_embd) 
       self.ln1 = nn.LayerNorm(n_embd)
       self.ln2 = nn.LayerNorm(n_embd)
@@ -79,20 +78,26 @@ class Block(nn.Module):
       return x
 
 class WordGramModel(nn.Module):
-    def __init__(self, vocab_size):
+    embedding_size : int
+    vocab_size : int 
+
+
+    def __init__(self, vocab_size : int, emb_size : int):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
-        self.positional_embedding = nn.Embedding(block_size, n_embd)
+        self.embedding_size = emb_size
+        self.vocab_size = vocab_size
+        self.token_embedding_table = nn.Embedding(vocab_size, emb_size)
+        self.positional_embedding = nn.Embedding(block_size, emb_size)
         self.blocks = nn.Sequential(
-            Block(n_embd),
-            Block(n_embd),
-            Block(n_embd),
-            Block(n_embd),
-            nn.LayerNorm(n_embd)
+            Block(emb_size),
+            Block(emb_size),
+            Block(emb_size),
+            Block(emb_size),
+            nn.LayerNorm(emb_size)
         )
         self.output = nn.Sequential(
-            nn.Dropout(dropout),
-            nn.Linear(n_embd, vocab_size)
+            nn.Dropout(DROPOUT),
+            nn.Linear(emb_size, vocab_size)
         )
 
     def forward(self, x, targets=None, return_activations=False):

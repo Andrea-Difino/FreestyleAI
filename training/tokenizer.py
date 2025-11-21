@@ -9,7 +9,7 @@ GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1
 SPECIAL_TOKENS = ["<START>", "<END>", "<UNK>", "<LINE>"]
 
 CSV_PATH          = "FreestyleAI/updated_rappers.csv"     
-CORPUS_PATH       = "tmp_corpus.txt"                      
+CORPUS_PATH       = "FreestyleAI/tmp_corpus.txt"                      
 SPM_MODEL_PREFIX  = "FreestyleAI/models/bpe_spm"          
 VOCAB_SIZE        = 30000                                 # BPE token number
 CHAR_COVERAGE     = 1.0                                   

@@ -60,9 +60,9 @@ def main():
 
     # ------------------- Hyper‑params -------------------
     batch_size = 64
-    block_size = 32
+    block_size = 64
     eval_iters = 200
-    n_embd     = 384
+    emb_dim    = 384
     learning_rate = 0.0005
     epochs   = 125
     patience = 10
@@ -82,7 +82,7 @@ def main():
                             pin_memory=True, num_workers=0, drop_last=True)
 
     # ------------------- Model & Optimizer -------------------
-    model = WordGramModel(VOCAB_SIZE).to(DEVICE)
+    model = WordGramModel(VOCAB_SIZE, emb_dim).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # ------------------- Setup live plot -------------------
@@ -170,7 +170,7 @@ def main():
     torch.save({
         "sp_model_path": SPM_MODEL_PATH,
         "context_size": block_size,
-        "embedding_dim": n_embd,
+        "embedding_dim": emb_dim,
         "vocab_size": VOCAB_SIZE,
     }, "FreestyleAI/metadata/bpe-metadata.pt")
 
