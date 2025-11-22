@@ -19,10 +19,11 @@ sp.Load(SPM_MODEL_PATH)
 VOCAB_SIZE = sp.GetPieceSize()
 START_ID   = sp.PieceToId("<START>")
 END_ID     = sp.PieceToId("<END>")
+UNK_ID     = sp.PieceToId("<UNK>")
 PAD_ID     = sp.pad_id()
 LINE_ID    = sp.PieceToId("<LINE>")  # se il tuo modello lo usa
 
-print(f"🔠  Vocabulary size: {VOCAB_SIZE}   START={START_ID}  END={END_ID}  LINE={LINE_ID} PAD={PAD_ID}")
+print(f"🔠  Vocabulary size: {VOCAB_SIZE}   START={START_ID}  END={END_ID}  LINE={LINE_ID} PAD={PAD_ID} UNK={UNK_ID}")
 
 model = WordGramModel(VOCAB_SIZE, 384)
 model.load_state_dict(torch.load(MODEL_STATE_PATH, map_location="cuda"))
@@ -115,6 +116,7 @@ def generate_text(model, sp, start_prompt: str = "", max_tokens: int = MAX_TOKEN
         # Evita di generare START o PAD o UNK se necessario
         logits_last[:, START_ID] = float('-inf')
         logits_last[:, PAD_ID] = float('-inf')
+        logits_last[:, UNK_ID] = float('-inf')
         
         probs_raw = torch.softmax(logits_last, dim=-1)
         current_entropy = -(probs_raw * torch.log(probs_raw + 1e-9)).sum(dim=-1).item()
@@ -139,7 +141,7 @@ def generate_text(model, sp, start_prompt: str = "", max_tokens: int = MAX_TOKEN
         probs = torch.softmax(logits_last, dim=-1)
 
         # --- Sampling ---
-        next_id = sample_from_probs(probs, top_k=20, top_p=top_p) # Aggiunto top_k
+        next_id = sample_from_probs(probs, top_k=50, top_p=top_p) # Aggiunto top_k
         
         generated_ids.append(next_id)
         context.append(next_id)
