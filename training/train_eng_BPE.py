@@ -2,6 +2,7 @@ import time, pickle, torch, torch.nn.functional as F
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 import numpy as np
 import sentencepiece as spm
@@ -66,7 +67,7 @@ def main():
     learning_rate = 0.0005
     epochs   = 125
     patience = 10
-    plot_interval = 64  # aggiornamento grafico ogni N batch
+    log_interval = 50  # aggiornamento tensorboard
 
     # ------------------- Train / Val split -------------------
     split_idx = int(0.8 * len(ids_int))
@@ -85,85 +86,71 @@ def main():
     model = WordGramModel(VOCAB_SIZE, emb_dim, block_size, dropout = 0.15).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    # ------------------- Setup live plot -------------------
-    plt.ion()
-    fig, axs = plt.subplots(1, 3, figsize=(18,5))
-    axs = axs.flatten()
-    losses_plot = []
-    line_loss, = axs[0].plot([], [], label="Train Loss")
-    axs[0].set_title("Train loss per batch")
-    axs[0].set_xlabel("Step")
-    axs[0].set_ylabel("Loss")
-    axs[0].legend()
+    # ------------------- TensorBoard Setup -------------------
+    writer = SummaryWriter("FreestyleAI/logs")
+    best_val_loss = float('inf')
+    no_improve = 0
+    
+    global_step = 0 # Per asse X di TensorBoard continuo tra le epoche
 
     # ------------------- Training loop -------------------
-    best_loss = float('inf')
-    no_improve = 0
-
     for epoch in range(epochs):
-        total_loss = 0.0
+        model.train()
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}", leave=False)
         
-        for batch_idx, batch in enumerate(pbar, 1):
+        for batch in pbar:
             xb, yb = unpack_batch(batch, DEVICE)
 
-            # forward con attivazioni
-            logits, loss, activations = model(xb, yb, return_activations=True)
+            # Forward
+            # return_activations=False perché non stiamo plottando istogrammi, risparmiamo memoria
+            logits, loss = model(xb, yb, return_activations=False) 
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
-            losses_plot.append(loss.item())
-            pbar.set_postfix(loss=loss.item())
+            # Logging Batch su TensorBoard
+            if global_step % log_interval == 0:
+                writer.add_scalar("Loss/batch_train", loss.item(), global_step)
+                
+                # Monitoraggio Gradient Norm (Leggero sulla RAM)
+                total_norm = 0.0
+                for p in model.parameters():
+                    if p.grad is not None:
+                        param_norm = p.grad.data.norm(2)
+                        total_norm += param_norm.item() ** 2
+                total_norm = total_norm ** 0.5
+                writer.add_scalar("System/GradientNorm", total_norm, global_step)
 
-            # --- Aggiorna plot solo ogni N batch ---
-            if batch_idx % plot_interval == 0:
-                # Loss
-                line_loss.set_xdata(range(len(losses_plot)))
-                line_loss.set_ydata(losses_plot)
-                axs[0].relim(); axs[0].autoscale_view()
+            pbar.set_postfix(loss=f"{loss.item():.4f}")
+            global_step += 1
 
-                # Gradienti
-                axs[1].cla()
-                all_grads = [p.grad.view(-1).cpu().numpy() for p in model.parameters() if p.grad is not None]
-                if all_grads:
-                    all_grads = np.concatenate(all_grads)
-                    axs[1].hist(all_grads, bins=20, color="blue", alpha=0.7)
-                    axs[1].set_title("Distribuzione gradienti")
+        # ------------------- FINE EPOCA (Validazione e Checkpoint) -------------------
+        # Calcoliamo la Loss vera su Train e Validation set
+        print(f"⏳ Stima loss fine epoca {epoch+1}...")
+        losses = estimate_loss(model, train_loader, val_loader, eval_iters, DEVICE)
+        
+        print(f"📉 Epoch {epoch+1}: Train Loss {losses['train']:.4f}, Val Loss {losses['val']:.4f}")
+        
+        # Scrivi su TensorBoard
+        writer.add_scalar("Loss/epoch_train", losses['train'], epoch)
+        writer.add_scalar("Loss/epoch_val", losses['val'], epoch)
 
-                # Attivazioni neuroni
-                axs[2].cla()
-                mean_acts = [act.abs().mean().item() for act in activations]
-                axs[2].bar(range(len(mean_acts)), mean_acts, color="orange", alpha=0.7)
-                axs[2].set_title("Attivazioni medie dei neuroni")
-                axs[2].set_xlabel("Layer")
-                axs[2].set_ylabel("Mean abs activation")
-
-                plt.draw()
-                plt.pause(0.01)
-
-        avg_epoch_loss = total_loss / len(train_loader)
-        print(f"\n📈  Avg train loss epoch {epoch+1}: {avg_epoch_loss:.4f}")
-
-        # Early-stopping
-        if avg_epoch_loss < best_loss:
-            best_loss = avg_epoch_loss
+        # --- Early Stopping & Checkpoint (Sulla VALIDATION Loss) ---
+        if losses['val'] < best_val_loss:
+            best_val_loss = losses['val']
             no_improve = 0
+            # Salviamo il modello migliore
+            torch.save(model.state_dict(), "FreestyleAI/models/bpe-model.pt")
+            print(f"💾  Nuovo miglior modello salvato! (Val Loss: {best_val_loss:.4f})")
         else:
             no_improve += 1
+            print(f"⚠️  Nessun miglioramento per {no_improve}/{patience} epoche.")
             if no_improve >= patience:
-                print("⏹️  Early stopping triggered")
+                print("⏹️  Early stopping triggered!")
                 break
 
-    plt.ioff()
-    fig.savefig("FreestyleAI/performance/BPE_training_plots.png")
-    plt.close()
-
-    # ------------------- Final evaluation -------------------
-    final_losses = estimate_loss(model, train_loader, val_loader, eval_iters, DEVICE)
-    print("\n🔎  Final loss:", final_losses)
+    writer.close()
 
     # ------------------- Save model + metadata -------------------
     torch.save(model.state_dict(), "FreestyleAI/models/bpe-model.pt")
@@ -176,12 +163,7 @@ def main():
 
     # ------------------- Timing -------------------
     hrs = (time.time() - start_time) / 3600.0
-    print(f"\n⏱️  Tempo di esecuzione: {hrs:.2f} ore")
-    with open("FreestyleAI/performance/performance_log.txt", "a") as f:
-        f.write(
-            f"\nBPE_SPM-Model - Train loss: {final_losses['train']:.4f}, "
-            f"Val loss: {final_losses['val']:.4f}, Tempo (h): {hrs:.2f}\n"
-        )
+    print(f"\n⏱️  Tempo totale: {hrs:.2f} ore")
 
 if __name__ == "__main__":
     main()
