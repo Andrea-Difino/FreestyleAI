@@ -6,66 +6,76 @@ from FreestyleAI import WordGramModel # type: ignore
 
 
 DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm_updated.model"   
-MODEL_STATE_PATH = "FreestyleAI/models/bpe-model-finetuned.pt"    
+SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm.model"   
+MODEL_STATE_PATH = "FreestyleAI/models/bpe-model.pt"    
 MAX_TOKENS      = 150      # lunghezza massima della sequenza generata
-TEMPERATURE     = 1.3     # temperatura di base (più alta → più casuale)
-TOP_K           = 20       # 0 = disabled, altrimenti tiene i K token più probabili
+TEMPERATURE     = 0.9     # temperatura di base (più alta → più casuale)
 TOP_P           = 0.9     # nucleus sampling (0 = disabled)
-BLOCK_SIZE      = 32      
+BLOCK_SIZE      = 64      
 
 sp = spm.SentencePieceProcessor()
 sp.Load(SPM_MODEL_PATH)
 
-VOCAB_SIZE   = sp.GetPieceSize()
-START_ID = sp.PieceToId("<START>")
-END_ID   = sp.PieceToId("<END>")
-PAD_ID = sp.pad_id()
-LINE_ID      = sp.PieceToId("<LINE>")  # se il tuo modello lo usa
+VOCAB_SIZE = sp.GetPieceSize()
+START_ID   = sp.PieceToId("<START>")
+END_ID     = sp.PieceToId("<END>")
+PAD_ID     = sp.pad_id()
+LINE_ID    = sp.PieceToId("<LINE>")  # se il tuo modello lo usa
 
 print(f"🔠  Vocabulary size: {VOCAB_SIZE}   START={START_ID}  END={END_ID}  LINE={LINE_ID} PAD={PAD_ID}")
 
-model = WordGramModel(VOCAB_SIZE)
+model = WordGramModel(VOCAB_SIZE, 384)
 model.load_state_dict(torch.load(MODEL_STATE_PATH, map_location="cuda"))
 model.to(DEVICE)
 model.eval()
 
 print(f"✅  Model loaded – parametri totali: {sum(p.numel() for p in model.parameters()):,}")
 
-
-def sample_from_probs(probs: torch.Tensor, temperature: float, top_k: int = 0, top_p: float = 0.0):
+def apply_repetition_penalty(logits, sequence, penalty=1.2):
     """
-    - `probs`  : (1, vocab)   già softmax
-    - `temperature` : scala le log‑probabilità.
-    - `top_k`  : tieni i k token più probabili (0 = disabled).
-    - `top_p`  : nucleus sampling (mantieni la massa cumulativa ≤ p).
+    Penalizza i token già presenti nella 'sequence'.
+    penalty > 1.0 riduce la probabilità.
     """
-    # temperatura
-    if temperature != 1.0:
-        logits = torch.log(probs + 1e-9) / temperature
-        probs = torch.softmax(logits, dim=-1)
+    # Prendi l'insieme unico dei token generati (o solo gli ultimi N)
+    unique_tokens = set(sequence) 
+    
+    for token_id in unique_tokens:
+        # Se il logit è negativo, moltiplichiamo per rendere il numero più piccolo (più negativo)
+        # Se positivo, dividiamo per renderlo più piccolo (meno positivo)
+        if logits[0, token_id] < 0:
+            logits[0, token_id] *= penalty
+        else:
+            logits[0, token_id] /= penalty
+            
+    return logits
 
-    # top‑k
+def sample_from_probs(probs: torch.Tensor, top_k: int = 0, top_p: float = 0.0):
+    """
+    Sampling pulito senza ricalcolo della temperatura.
+    """
+    # Top-K
     if top_k > 0:
-        topk_vals, topk_idx = torch.topk(probs, top_k, dim=-1)
-        probs = torch.zeros_like(probs).scatter_(-1, topk_idx, topk_vals)
-        probs = probs / probs.sum(dim=-1, keepdim=True)   # normalizzi di nuovo
+        v, _ = torch.topk(probs, top_k)
+        # Maschera tutto ciò che è sotto il k-esimo valore
+        probs[probs < v[:, [-1]]] = 0
+        probs = probs / probs.sum(dim=-1, keepdim=True)
 
-    # nucleus (top‑p)
+    # Nucleus (Top-P)
     if top_p > 0.0:
         sorted_probs, sorted_idx = torch.sort(probs, descending=True, dim=-1)
         cumulative = torch.cumsum(sorted_probs, dim=-1)
-        # maschera tutti i token oltre la soglia p
+        
         mask = cumulative > top_p
-        # sposta la maschera di una posizione (mantieni il primo token che supera p)
         mask[..., 1:] = mask[..., :-1].clone()
         mask[..., 0] = False
+        
         sorted_probs = sorted_probs.masked_fill(mask, 0.0)
-        # riporta nella posizione originale
+        
+        # Riporta all'ordine originale
         probs = torch.zeros_like(probs).scatter_(-1, sorted_idx, sorted_probs)
         probs = probs / probs.sum(dim=-1, keepdim=True)
 
-    # campiona un token
+    # Campionamento
     next_id = torch.multinomial(probs, num_samples=1).item()
     return next_id
 
@@ -73,65 +83,73 @@ def sample_from_probs(probs: torch.Tensor, temperature: float, top_k: int = 0, t
 # ----------------------------------------------------------------------
 #   4️⃣  Funzione di generazione
 # ----------------------------------------------------------------------
-def generate_text(model, sp, max_tokens: int = MAX_TOKENS, temperature: float = TEMPERATURE, top_k: int = TOP_K, top_p: float = TOP_P, block_size: int = BLOCK_SIZE):
-    """
-    Genera una sequenza di token utilizzando il contesto di `block_size`.
-    Restituisce sia la lista di ID che la stringa decodificata.
-    """
+def generate_text(model, sp, start_prompt: str = "", max_tokens: int = MAX_TOKENS, temperature: float = TEMPERATURE, top_p: float = TOP_P, block_size: int = BLOCK_SIZE):
+    
     model.eval()
-    # contesto iniziale = BOS + padding di BOS (così il modello ha sempre block_size token)
-    context = [START_ID] + [PAD_ID]*(block_size-1)
 
-    generated_ids = []          # solo i token *generati* (esclude il padding iniziale)
-    entropies = []              # opzionale: per analisi
+    context = [START_ID]
+    if start_prompt:
+        context += sp.EncodeAsIds(start_prompt)
+
+    generated_ids = []
+    entropies = []
     MIN_TOKENS_BEFORE_STOP = 10
 
     for step in range(max_tokens):
-        # -------------------------------------------------
-        #   Forward: prendiamo solo l'ultimo token del blocco
-        # -------------------------------------------------
-        x = torch.tensor([context], dtype=torch.long, device=DEVICE)   # shape (1, block_size)
+        # Prepara l'input. Se il modello richiede una lunghezza fissa, 
+        # qui dovresti gestire il padding, ma i Transformer solitamente gestiscono
+        # sequenze variabili fino al block_size.
+        
+        # Tagliamo il contesto se supera il block_size (Sliding Window)
+        if len(context) > block_size:
+            context = context[-block_size:]
+
+        x = torch.tensor([context], dtype=torch.long, device=DEVICE)
+
         with torch.no_grad():
-            logits, _ = model(x) # logits shape (1, block_size, vocab)
+            logits, _ = model(x) 
+        
+        # Prendi i logits dell'ultimo token
+        logits_last = logits[:, -1, :]
+        
+        # Evita di generare START o PAD o UNK se necessario
+        logits_last[:, START_ID] = float('-inf')
+        logits_last[:, PAD_ID] = float('-inf')
+        
+        probs_raw = torch.softmax(logits_last, dim=-1)
+        current_entropy = -(probs_raw * torch.log(probs_raw + 1e-9)).sum(dim=-1).item()
+        entropies.append(current_entropy)
 
-        # Consido l'ultimo token della sequenza (indice -1)
-        logits_last = logits[:, -1, :] / temperature
-        probs = torch.softmax(logits_last, dim=-1)   # (1, vocab)
+        current_temp = TEMPERATURE  # Valore base (es. 0.8 o 1.0)
 
-        # -------------------------------------------------
-        #   Entropia 
-        # -------------------------------------------------
-        entropy = -(probs * torch.log(probs + 1e-9)).sum(dim=-1).item()
-        entropies.append(entropy)
+        if current_entropy < 1.5:
+            current_temp = 1.5  # SPINTA CREATIVA: Rompi la sicurezza, rischia di più.
+        elif current_entropy > 3.5:
+            current_temp = 0.6 # FRENO A MANO: Scegli solo le parole più probabili.
 
-        if entropy < 2.2:
-            temperature += 0.2
-        elif entropy > 4.0:
-            temperature = max(0.5, temperature - 0.1)
+        logits_scaled = logits_last / current_temp
 
-        # -------------------------------------------------
-        #   Sampling 
-        # -------------------------------------------------
-        next_id = sample_from_probs(probs, temperature, top_k, top_p)
+        # Puoi guardare tutta la storia (generated_ids) o solo gli ultimi 20-50 token
+        lookback_window = generated_ids[-50:] if len(generated_ids) > 0 else []
+
+        if len(lookback_window) > 0:
+            logits_last = apply_repetition_penalty(logits_scaled, lookback_window, penalty=1.2)
+        # ---------------------------------------------------------
+
+        probs = torch.softmax(logits_last, dim=-1)
+
+        # --- Sampling ---
+        next_id = sample_from_probs(probs, top_k=20, top_p=top_p) # Aggiunto top_k
+        
         generated_ids.append(next_id)
+        context.append(next_id)
 
-        # -------------------------------------------------
-        #   Aggiorna il contesto (shift‑left + nuovo token)
-        # -------------------------------------------------
-        context = context[1:] + [next_id]
-
-        # -------------------------------------------------
-        #   Stop‑condition (se trovi <LINE> o <END>)
-        # -------------------------------------------------
-        if len(generated_ids) >= MIN_TOKENS_BEFORE_STOP and next_id in {END_ID}:
+        # Stop condition
+        if len(generated_ids) >= MIN_TOKENS_BEFORE_STOP and next_id == END_ID:
             break
 
-    # Decodifica in stringa
     text = sp.DecodeIds(generated_ids)
-    # Se vuoi trasformare il token <LINE> in un ritorno a capo:
-    text = text.replace("<LINE>", "\n")
-    text = text.replace("<END>", "")
-    # (Puoi anche rimuovere eventuali token di padding residui)
+    text = text.replace("<LINE>", "\n").replace("<END>", "")
     return generated_ids, text, entropies
 
 
@@ -146,7 +164,6 @@ if __name__ == "__main__":
             sp,
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
-            top_k=TOP_K,
             top_p=TOP_P,
             block_size=BLOCK_SIZE,
         )
