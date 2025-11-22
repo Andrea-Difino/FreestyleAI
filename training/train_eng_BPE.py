@@ -60,7 +60,7 @@ def main():
 
     # ------------------- Hyper‑params -------------------
     batch_size = 64
-    block_size = 64
+    block_size = 256
     eval_iters = 200
     emb_dim    = 384
     learning_rate = 0.0005
@@ -82,7 +82,7 @@ def main():
                             pin_memory=True, num_workers=0, drop_last=True)
 
     # ------------------- Model & Optimizer -------------------
-    model = WordGramModel(VOCAB_SIZE, emb_dim).to(DEVICE)
+    model = WordGramModel(VOCAB_SIZE, emb_dim, block_size, dropout = 0.15).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # ------------------- Setup live plot -------------------
