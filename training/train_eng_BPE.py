@@ -1,4 +1,5 @@
-import time, pickle, torch, torch.nn.functional as F
+import time, pickle, torch
+from datetime import datetime
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torch.utils.data import TensorDataset, DataLoader
@@ -83,11 +84,14 @@ def main():
                             pin_memory=True, num_workers=0, drop_last=True)
 
     # ------------------- Model & Optimizer -------------------
-    model = WordGramModel(VOCAB_SIZE, emb_dim, block_size, dropout = 0.15).to(DEVICE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    model = WordGramModel(VOCAB_SIZE, emb_dim, block_size, dropout = 0.25).to(DEVICE)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
 
     # ------------------- TensorBoard Setup -------------------
-    writer = SummaryWriter("FreestyleAI/logs")
+    run_name = datetime.now().strftime("%Y%m%d_%H%M") + "dropout0.25-wd0.01"
+
+    writer_train = SummaryWriter(f"FreestyleAI/logs/{run_name}/train")
+    writer_val   = SummaryWriter(f"FreestyleAI/logs/{run_name}/val")
     best_val_loss = float('inf')
     no_improve = 0
     
@@ -111,7 +115,7 @@ def main():
 
             # Logging Batch su TensorBoard
             if global_step % log_interval == 0:
-                writer.add_scalar("Loss/batch_train", loss.item(), global_step)
+                writer_train.add_scalar("Loss/batch", loss.item(), global_step)
                 
                 # Monitoraggio Gradient Norm (Leggero sulla RAM)
                 total_norm = 0.0
@@ -120,7 +124,7 @@ def main():
                         param_norm = p.grad.data.norm(2)
                         total_norm += param_norm.item() ** 2
                 total_norm = total_norm ** 0.5
-                writer.add_scalar("System/GradientNorm", total_norm, global_step)
+                writer_train.add_scalar("System/GradientNorm", total_norm, global_step)
 
             pbar.set_postfix(loss=f"{loss.item():.4f}")
             global_step += 1
@@ -133,8 +137,8 @@ def main():
         print(f"📉 Epoch {epoch+1}: Train Loss {losses['train']:.4f}, Val Loss {losses['val']:.4f}")
         
         # Scrivi su TensorBoard
-        writer.add_scalar("Loss/epoch_train", losses['train'], epoch)
-        writer.add_scalar("Loss/epoch_val", losses['val'], epoch)
+        writer_train.add_scalar("Loss/epoch", losses['train'], epoch)
+        writer_val.add_scalar("Loss/epoch", losses['val'], epoch)
 
         # --- Early Stopping & Checkpoint (Sulla VALIDATION Loss) ---
         if losses['val'] < best_val_loss:
@@ -150,10 +154,10 @@ def main():
                 print("⏹️  Early stopping triggered!")
                 break
 
-    writer.close()
+    writer_train.close()
+    writer_val.close()
 
-    # ------------------- Save model + metadata -------------------
-    torch.save(model.state_dict(), "FreestyleAI/models/bpe-model.pt")
+    # ------------------- Save metadata -------------------
     torch.save({
         "sp_model_path": SPM_MODEL_PATH,
         "context_size": block_size,

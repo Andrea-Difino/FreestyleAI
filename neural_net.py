@@ -88,6 +88,7 @@ class WordGramModel(nn.Module):
         self.vocab_size = vocab_size
         self.token_embedding_table = nn.Embedding(vocab_size, emb_size)
         self.positional_embedding = nn.Embedding(context_size, emb_size)
+
         self.blocks = nn.Sequential(
             Block(emb_size , dropout),
             Block(emb_size , dropout),
@@ -95,10 +96,21 @@ class WordGramModel(nn.Module):
             Block(emb_size , dropout),
             nn.LayerNorm(emb_size)
         )
+
         self.output = nn.Sequential(
-            nn.Dropout(.15),
+            nn.Dropout(dropout),
             nn.Linear(emb_size, vocab_size)
         )
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, x, targets=None, return_activations=False):
         activations = []
@@ -109,26 +121,23 @@ class WordGramModel(nn.Module):
         tok_emb = self.token_embedding_table(x)
         pos_emb = self.positional_embedding(torch.arange(T, device=x.device))
         h = tok_emb + pos_emb
-        if return_activations:
-            activations.append(h.detach())
+        if return_activations: activations.append(h.detach())
 
         # --- Blocks ---
         h = self.blocks(h)
-        if return_activations:
-            activations.append(h.detach())
+        if return_activations: activations.append(x.detach())
 
         # --- Output layer ---
         logits = self.output(h)
-        if return_activations:
-            activations.append(logits.detach())
+        if return_activations: activations.append(logits.detach())
 
         # --- Loss ---
         loss = None
         if targets is not None:
             B, T, C = logits.shape
-            logits_flat = logits.view(B*T, C)
-            targets_flat = targets.view(B*T)
-            loss = F.cross_entropy(logits_flat, targets_flat)
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits, targets)
 
         if return_activations:
             return logits, loss, activations
