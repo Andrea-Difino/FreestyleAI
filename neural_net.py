@@ -2,9 +2,6 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu' #use GPU if available
-n_head = 4 #n_head = n_embd // head_size
-
 class Head(nn.Module): 
     """ one head of self-attention with FLASH ATTENTION """
     def __init__(self, head_size, emb_size, dropout):
@@ -34,8 +31,9 @@ class Head(nn.Module):
         return out
     
 class MultiHeadAttention(nn.Module): 
+    n_head 
     """multiple heads running in parallel"""
-    def __init__(self, head_size : int, emb_size : int, dropout : int):
+    def __init__(self, head_size : int, emb_size : int, dropout : int, n_head : int):
       super().__init__()
       self.heads = nn.ModuleList([
          Head(head_size, emb_size, dropout) for _ in range(n_head)
@@ -63,11 +61,12 @@ class FeedForward(nn.Module):
       return self.net(x)
 
 class Block(nn.Module): 
+    N_HEAD : int = 4 #n_head = n_embd // head_size
 
     def __init__(self, n_embd : int, dropout : int):
       super().__init__()
-      head_size = n_embd // n_head
-      self.sa = MultiHeadAttention(head_size, n_embd, dropout)
+      head_size = n_embd // self.N_HEAD
+      self.sa = MultiHeadAttention(head_size, n_embd, dropout, self.N_HEAD)
       self.ffwd = FeedForward(n_embd, dropout) 
       self.ln1 = nn.LayerNorm(n_embd)
       self.ln2 = nn.LayerNorm(n_embd)
