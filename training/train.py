@@ -7,7 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 import numpy as np
 import sentencepiece as spm
-from FreestyleAI import WordGramModel # type: ignore
+from ..neural_net import WordGramModel 
 
 def make_dataset(tensor, block_size):
     """Create sequence of length block_size+1 (x + y) without overlap."""
@@ -64,7 +64,7 @@ def main():
     batch_size = 64
     block_size = 256
     eval_iters = 200
-    emb_dim    = 384
+    emb_dim    = 512 #384 old
     learning_rate = 0.0005
     epochs   = 125
     patience = 10
@@ -84,11 +84,11 @@ def main():
                             pin_memory=True, num_workers=0, drop_last=True)
 
     # ------------------- Model & Optimizer -------------------
-    model = WordGramModel(VOCAB_SIZE, emb_dim, block_size, dropout = 0.25).to(DEVICE)
+    model = WordGramModel(VOCAB_SIZE, emb_dim, block_size, dropout = 0.3).to(DEVICE)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
 
     # ------------------- TensorBoard Setup -------------------
-    run_name = datetime.now().strftime("%Y%m%d_%H%M") + "dropout0.25-wd0.01"
+    run_name = datetime.now().strftime("%Y%m%d_%H%M") + "dropout0.3-emb512"
 
     writer_train = SummaryWriter(f"FreestyleAI/logs/{run_name}/train")
     writer_val   = SummaryWriter(f"FreestyleAI/logs/{run_name}/val")
@@ -144,7 +144,7 @@ def main():
         if losses['val'] < best_val_loss:
             best_val_loss = losses['val']
             no_improve = 0
-            # Salviamo il modello migliore
+            # Save best model
             torch.save(model.state_dict(), "FreestyleAI/models/bpe-model.pt")
             print(f"💾  Nuovo miglior modello salvato! (Val Loss: {best_val_loss:.4f})")
         else:

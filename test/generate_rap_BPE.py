@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 import sentencepiece as spm
-from FreestyleAI import WordGramModel # type: ignore
+from ..neural_net import WordGramModel 
 
 
 DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,7 +25,7 @@ LINE_ID    = sp.PieceToId("<LINE>")  # se il tuo modello lo usa
 
 print(f"🔠  Vocabulary size: {VOCAB_SIZE}   START={START_ID}  END={END_ID}  LINE={LINE_ID} PAD={PAD_ID} UNK={UNK_ID}")
 
-model = WordGramModel(VOCAB_SIZE, 384)
+model = WordGramModel(VOCAB_SIZE, 512, 256, 0.25)
 model.load_state_dict(torch.load(MODEL_STATE_PATH, map_location="cuda"))
 model.to(DEVICE)
 model.eval()
