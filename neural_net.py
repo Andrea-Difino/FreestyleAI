@@ -31,7 +31,6 @@ class Head(nn.Module):
         return out
     
 class MultiHeadAttention(nn.Module): 
-    n_head 
     """multiple heads running in parallel"""
     def __init__(self, head_size : int, emb_size : int, dropout : int, n_head : int):
       super().__init__()
