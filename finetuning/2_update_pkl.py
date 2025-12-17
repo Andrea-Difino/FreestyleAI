@@ -3,8 +3,8 @@ import sentencepiece as spm
 from pathlib import Path
 
 # Percorsi
-SPM_MODEL_PATH = "FreestyleAI/models/bpe_spm_updated.model"   # nuovo tokenizer creato
-CORPUS_PATH = Path("FreestyleAI/dataset_creation/combined_corpus.txt")         # corpus combinato salvato dallo script di aggiornamento
+SPM_MODEL_PATH = "FreestyleAI/models/bpe_spm_updated.model"   
+CORPUS_PATH = Path("FreestyleAI/dataset_creation/combined_corpus.txt")
 OUT_PKL_PATH = Path("FreestyleAI/data/ids_spm_updated.pkl")
 
 def main():
