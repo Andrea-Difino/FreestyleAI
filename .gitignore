@@ -9,7 +9,7 @@ dataset_creation/*.txt
 data/*
 logs/*
 dataset_creation/*
-
+analisi_progetto.md
 #model and datasets
 *.csv
 *.pt
