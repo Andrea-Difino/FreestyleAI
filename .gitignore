@@ -8,6 +8,7 @@ dataset_creation/*.txt
 */__pycache__/*
 data/*
 logs/*
+dataset_creation/*
 
 #model and datasets
 *.csv

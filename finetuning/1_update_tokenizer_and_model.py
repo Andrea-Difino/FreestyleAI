@@ -14,7 +14,7 @@ try:
     from FreestyleAI import WordGramModel  # type: ignore
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
-    from neural_net import WordGramModel  # type: ignore
+    from neural_net import WordGramModel 
 
 GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
 _SPLIT_RE = re.compile(GPT4_SPLIT_PATTERN)
