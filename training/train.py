@@ -1,13 +1,22 @@
-import time, pickle, torch
+import pickle
+import sys
+import time
 from datetime import datetime
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-from torch.utils.data import TensorDataset, DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
-import numpy as np
+
 import sentencepiece as spm
-from ..neural_net import WordGramModel 
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.tensorboard.writer import SummaryWriter
+from tqdm import tqdm
+
+# Allow this file to be launched directly from any working directory.
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from neural_net import WordGramModel
+
 
 def make_dataset(tensor, block_size):
     """Create sequence of length block_size+1 (x + y) without overlap."""
@@ -47,14 +56,14 @@ def main():
     torch.backends.cudnn.benchmark = True
 
     # ------------------- Tokenizer -------------------
-    SPM_MODEL_PATH = "FreestyleAI/models/bpe_spm.model"
+    SPM_MODEL_PATH = _ROOT / "models" / "bpe_spm.model"
     sp = spm.SentencePieceProcessor()
-    sp.Load(SPM_MODEL_PATH)
+    sp.Load(str(SPM_MODEL_PATH))
     VOCAB_SIZE = sp.GetPieceSize()
     print(f"🔠  Vocabulary size (SentencePiece): {VOCAB_SIZE}")
 
     # ------------------- Load pre‑encoded IDs -------------------
-    IDS_PATH = Path("FreestyleAI/data/ids_spm.pkl")
+    IDS_PATH = _ROOT / "data" / "ids_spm.pkl"
     with IDS_PATH.open("rb") as f:
         ids_int = pickle.load(f)         
 
@@ -84,14 +93,14 @@ def main():
                             pin_memory=True, num_workers=0, drop_last=True)
 
     # ------------------- Model & Optimizer -------------------
-    model = WordGramModel(VOCAB_SIZE, emb_dim, block_size, dropout = 0.3).to(DEVICE)
+    model = WordGramModel(VOCAB_SIZE, emb_dim, block_size, dropout = .2).to(DEVICE)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
 
     # ------------------- TensorBoard Setup -------------------
-    run_name = datetime.now().strftime("%Y%m%d_%H%M") + "dropout0.3-emb512"
+    run_name = datetime.now().strftime("%Y%m%d_%H%M") + "dropout3-emb512"
 
-    writer_train = SummaryWriter(f"FreestyleAI/logs/{run_name}/train")
-    writer_val   = SummaryWriter(f"FreestyleAI/logs/{run_name}/val")
+    writer_train = SummaryWriter(str(_ROOT / "logs" / run_name / "train"))
+    writer_val   = SummaryWriter(str(_ROOT / "logs" / run_name / "val"))
     best_val_loss = float('inf')
     no_improve = 0
     
@@ -145,7 +154,7 @@ def main():
             best_val_loss = losses['val']
             no_improve = 0
             # Save best model
-            torch.save(model.state_dict(), "FreestyleAI/models/bpe-model.pt")
+            torch.save(model.state_dict(), _ROOT / "models" / "bpe-model.pt")
             print(f"💾  Nuovo miglior modello salvato! (Val Loss: {best_val_loss:.4f})")
         else:
             no_improve += 1
@@ -159,11 +168,11 @@ def main():
 
     # ------------------- Save metadata -------------------
     torch.save({
-        "sp_model_path": SPM_MODEL_PATH,
+        "sp_model_path": str(SPM_MODEL_PATH),
         "context_size": block_size,
         "embedding_dim": emb_dim,
         "vocab_size": VOCAB_SIZE,
-    }, "FreestyleAI/metadata/bpe-metadata.pt")
+    }, _ROOT / "metadata" / "bpe-metadata.pt")
 
     # ------------------- Timing -------------------
     hrs = (time.time() - start_time) / 3600.0

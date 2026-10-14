@@ -8,9 +8,12 @@ import pickle
 GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
 SPECIAL_TOKENS = ["<START>", "<END>", "<UNK>", "<LINE>"]
 
-CSV_PATH          = "FreestyleAI/updated_rappers.csv"     
-CORPUS_PATH       = "FreestyleAI/tmp_corpus.txt"                      
-SPM_MODEL_PREFIX  = "FreestyleAI/models/bpe_spm"          
+# Base del progetto — funziona da qualsiasi working directory
+_ROOT = Path(__file__).resolve().parent.parent
+
+CSV_PATH          = str(_ROOT / "updated_rappers.csv")
+CORPUS_PATH       = str(_ROOT / "tmp_corpus.txt")
+SPM_MODEL_PREFIX  = str(_ROOT / "models" / "bpe_spm")
 VOCAB_SIZE        = 30000                                 # BPE token number
 CHAR_COVERAGE     = 1.0                                   
 
@@ -165,7 +168,7 @@ if __name__ == "__main__":
     ids = encode_dataset(csv_path, spm_model)
 
     # save ids
-    ids_path = Path("FreestyleAI/data/ids_spm.pkl")
+    ids_path = _ROOT / "data" / "ids_spm.pkl"
     ids_path.parent.mkdir(parents=True, exist_ok=True)
     with ids_path.open("wb") as f:
         pickle.dump(ids, f)
