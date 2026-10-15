@@ -1,13 +1,18 @@
-import torch
-import torch.nn.functional as F
-from tqdm import tqdm
-import sentencepiece as spm
-from ..neural_net import WordGramModel 
+import sys
+from pathlib import Path
 
+import sentencepiece as spm
+import torch
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+    
+from neural_net import WordGramModel
 
 DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-SPM_MODEL_PATH  = "FreestyleAI/models/bpe_spm.model"   
-MODEL_STATE_PATH = "FreestyleAI/models/bpe-model.pt"    
+SPM_MODEL_PATH  = str(_ROOT / "models" / "bpe_spm.model")   
+MODEL_STATE_PATH = _ROOT / "models" / "bpe-model.pt"    
 MAX_TOKENS      = 150      # lunghezza massima della sequenza generata
 TEMPERATURE     = 0.9     # temperatura di base (più alta → più casuale)
 TOP_P           = 0.9     # nucleus sampling (0 = disabled)
